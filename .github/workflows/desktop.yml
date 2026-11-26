@@ -34,7 +34,7 @@ jobs:
         run: |
           TARGET=$([ "$RUNNER_OS" = "Windows" ] && echo "--win --x64" || echo "--mac")
           PUBLISH=$([[ "$GITHUB_REF" == refs/tags/* ]] && echo "always" || echo "never")
-          npx electron-builder $TARGET -c.publish.provider=github --publish $PUBLISH
+          npx electron-builder $TARGET --publish $PUBLISH
       - uses: actions/upload-artifact@v4
         with:
           name: PandichLab-${{ runner.os }}

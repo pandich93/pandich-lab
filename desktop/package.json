@@ -11,7 +11,7 @@
     "start": "electron .",
     "dist:win": "electron-builder --win --x64 --publish never",
     "dist:mac": "electron-builder --mac --publish never",
-    "release": "electron-builder -c.publish.provider=github --publish always"
+    "release": "electron-builder --publish always"
   },
   "dependencies": {
     "electron-updater": "6.8.11"
@@ -102,6 +102,16 @@
     "dmg": {
       "title": "Pandich Lab ${version}"
     },
-    "publish": null
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "pandich93",
+        "repo": "pandich-lab"
+      }
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pandich93/pandich-lab.git"
   }
 }
