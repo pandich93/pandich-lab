@@ -276,7 +276,15 @@ function seriesFor(sp, paneIndex) {
     ser = chart.addSeries(LWC.LineSeries, opts, paneIndex);
   }
   const isArea = st.includes('area');
-  ser.setData(sp.data.map(d => d.v === null ? { time: d.t } : (d.c && !isArea ? { time: d.t, value: d.v, color: d.c } : { time: d.t, value: d.v })));
+  // plot.style_linebr: the line must break on na. Lightweight Charts joins points across whitespace, but a segment is drawn
+  // with the style of its START point → make the last point before every gap transparent.
+  const br = st.includes('linebr') && !isArea;
+  let lastVal = -1; if (br) for (let i = sp.data.length - 1; i >= 0; i--) if (sp.data[i].v !== null) { lastVal = i; break; }
+  ser.setData(sp.data.map((d, i, arr) => {
+    if (d.v === null) return { time: d.t };
+    const gapNext = br && i < lastVal && arr[i + 1].v === null; // the series' final point keeps its colour (price-scale label)
+    return gapNext ? { time: d.t, value: d.v, color: 'rgba(0,0,0,0)' } : (d.c && !isArea ? { time: d.t, value: d.v, color: d.c } : { time: d.t, value: d.v });
+  }));
   indicatorSeries.push(ser);
   return ser;
 }

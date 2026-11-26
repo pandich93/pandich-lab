@@ -1,11 +1,94 @@
-# Pandich Lab
+<div align="center">
 
-**Локальный график + ИИ-ассистент, который пишет, запускает и рисует индикаторы Pine Script v6.**
-**A local charting + AI workbench that writes, runs and draws Pine Script v6 indicators.**
+# 🐼 Pandich Lab
 
-Open source · AGPL-3.0 · некоммерческий проект / non-commercial project
+**Describe an indicator in plain words — the AI writes Pine Script® v6, tests it and draws it on a live chart.**
 
-[Русский](#русский) · [English](#english)
+Free · open source · runs locally on Windows and macOS
+
+[![Release](https://img.shields.io/github/v/release/pandich93/pandich-lab?label=download&color=2962ff)](https://github.com/pandich93/pandich-lab/releases/latest)
+[![License](https://img.shields.io/badge/license-AGPL--3.0-26a69a)](LICENSE)
+![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-555)
+
+[**⬇ Download**](https://github.com/pandich93/pandich-lab/releases/latest) · [English](#english) · [Русский](#русский) · [O'zbekcha](#ozbekcha) · [Install with AI](#-install-with-an-ai-agent)
+
+![Pandich Lab: four synced charts and the Panda assistant](docs/img/hero.jpg)
+
+</div>
+
+| Pine editor with live results | Bar Replay with paper trading |
+|---|---|
+| ![Pine editor](docs/img/editor.jpg) | ![Bar Replay](docs/img/replay.jpg) |
+
+## ⬇ Download
+
+| System | File | Install |
+|---|---|---|
+| Windows 10/11 (x64) | `PandichLab-x.y.z-win-x64.exe` | double-click; no admin rights |
+| macOS 12+ (Apple Silicon & Intel) | `PandichLab-x.y.z-mac-universal.dmg` | drag to Applications |
+
+Get both from [**Releases**](https://github.com/pandich93/pandich-lab/releases/latest). The app updates itself.
+
+> The installers are not code-signed yet.
+> - **Windows:** "Windows protected your PC" → **More info** → **Run anyway**.
+> - **macOS:** System Settings → Privacy & Security → **Open Anyway**. The macOS build is new and less tested than Windows; please report problems in Issues.
+
+The interface is currently in Russian. The Panda assistant answers in the language you write in.
+
+## 🤖 Install with an AI agent
+
+Have an AI coding agent on your computer (Claude Code, Codex CLI, Gemini CLI, Cursor…)? Copy this prompt into it. It downloads the official release, verifies it, installs it and checks that it runs, asking you before each step. Details: [docs/AI_INSTALL.md](docs/AI_INSTALL.md).
+
+```text
+Install the open-source desktop app "Pandich Lab" on this computer for me.
+
+Official source (use nothing else): https://github.com/pandich93/pandich-lab
+Download only from that repository's GitHub Releases.
+
+Rules
+- Answer me in the language I write in.
+- Ask for my confirmation before each step that downloads, installs or changes something. One step at a time.
+- No administrator/sudo rights are needed. Do not use them and do not change any system or security settings
+  except the single macOS step marked "ask first".
+- Do not touch unrelated files. If a step fails, show me the exact error and stop; do not improvise workarounds.
+
+Steps
+1. Detect the OS and CPU architecture. Supported: Windows 10/11 x64, macOS 12+ (Apple Silicon or Intel).
+   On anything else use the "From source" fallback at the end.
+2. Read https://api.github.com/repos/pandich93/pandich-lab/releases/latest and pick the asset:
+   Windows -> PandichLab-<version>-win-x64.exe ; macOS -> PandichLab-<version>-mac-universal.dmg
+   Tell me the version, file name, size and URL, then download it to my Downloads folder.
+   Verify the download: the size must match the API, and the SHA-512 (base64) must match the value in the
+   release asset latest.yml (Windows) or latest-mac.yml (macOS). If it does not match, delete the file and stop.
+3. Install:
+   - Windows: run the installer with the /S flag (silent, per-user). It installs to
+     %LOCALAPPDATA%\Programs\pandich-lab-desktop and creates Desktop and Start-menu shortcuts.
+   - macOS: mount the .dmg, copy "Pandich Lab.app" to /Applications, unmount.
+     The app is not notarized by Apple yet, so macOS blocks the first launch. ASK FIRST, and only if I agree run:
+       xattr -dr com.apple.quarantine "/Applications/Pandich Lab.app"
+     If I decline, explain how to allow it manually: System Settings -> Privacy & Security -> "Open Anyway".
+4. The built-in AI assistant (Panda) uses my own Claude Code. Check `claude --version`.
+   If it is missing, ask me, then install it with Anthropic's official installer:
+     Windows (PowerShell):  irm https://claude.ai/install.ps1 | iex
+     macOS:                 curl -fsSL https://claude.ai/install.sh | bash
+   Do NOT sign in for me and never ask for my password or tokens. Tell me to run `claude` once myself and sign in
+   with my Claude account. Charts and indicators work without it.
+5. Start Pandich Lab. Wait up to 60 seconds and check that the local server answers on one of
+   http://127.0.0.1:3779/api/config ... http://127.0.0.1:3785/api/config (the app picks the first free port).
+   If it does not, show me the end of the log:
+     Windows: %APPDATA%\Pandich Lab\logs\server.log
+     macOS:   ~/Library/Application Support/Pandich Lab/logs/server.log
+6. Optional, Windows only, and only if I ask for MetaTrader 5 quotes: check for 64-bit Python 3 and run
+   `python -m pip install --upgrade MetaTrader5`. The MT5 terminal must be running and logged in.
+7. Finish with a short report: installed version, install location, whether Claude Code is ready,
+   and what I still have to do myself (sign in to Claude; the app's first-run wizard repeats these checks).
+
+From source (Linux, or if I prefer not to use the installer)
+- Needs Node.js 18+ and git. Then:
+    git clone https://github.com/pandich93/pandich-lab.git
+    cd pandich-lab && npm install && npm start
+  Open http://localhost:3777 . The server listens on 127.0.0.1 only; never expose it to a network.
+```
 
 ---
 
@@ -57,6 +140,10 @@ Panda работает через твой собственный Claude:
 > - **macOS** заблокирует первый запуск → «Системные настройки» → «Конфиденциальность и безопасность» → «Всё равно открыть».
 
 Собрать установщик самому: `desktop\build-win.bat` (Windows) или `desktop/build-mac.sh` (macOS).
+
+**Установка через ИИ.** Если у тебя на компьютере есть ИИ-агент (Claude Code, Codex CLI, Gemini CLI, Cursor), скопируй в него [промпт из начала страницы](#-install-with-an-ai-agent): он сам скачает релиз, проверит его, установит и запустит, спрашивая разрешение перед каждым шагом.
+
+Интерфейс пока на русском. Сборка для macOS новая и проверена меньше, чем для Windows.
 
 ### Установка из исходников
 
@@ -194,6 +281,45 @@ Your data stays in `data/` and `scripts/`, both git-ignored.
 ### Disclaimer
 
 For research and education only. **Not financial advice.** Indicators, signals, replays and backtests can be wrong. Trading involves risk of loss.
+
+---
+
+## O'zbekcha
+
+### Bu nima
+
+Pandich Lab — kompyuteringizda ishlaydigan dastur: o'ngda jonli grafik, chapda **Panda** ismli AI yordamchi.
+
+- Indikatorni oddiy so'z bilan tasvirlaysiz. Panda Pine Script v6 kodini yozadi, grafikda ishga tushiradi, xatolarni tuzatadi va natijani chizadi.
+- Tayyor kodni saqlab, TradingView'ga qo'yishingiz mumkin.
+
+Imkoniyatlar:
+
+- **Grafik:** istalgan taymfreym (22m, 90m, 2D ham), 10 xil grafik turi, 35 ta chizish asbobi.
+- **Multi-grafik:** bir ekranda 8 tagacha grafik, sinxronlashtirish bilan.
+- **Pine-muharrir:** kod yozish, xatolar, loglar, strategiya testeri, versiyalar tarixi.
+- **Replay:** tarixni sham-shamlab qayta o'ynatish va qog'ozda savdo qilish. Natijalar: profit factor, drawdown, equity egri chizig'i.
+- **Watch:** signal har bir yopilgan shamda tekshiriladi va Telegram'ga yuboriladi, oyna yopiq bo'lsa ham.
+- **Kutubxona:** 23 ta tayyor indikator, shablonlar, ekran maketlari.
+- **Ma'lumotlar:** Binance (kripto) va, xohlasangiz, o'z MetaTrader 5 hisobingiz (faqat Windows).
+
+### O'rnatish
+
+1. [Releases](https://github.com/pandich93/pandich-lab/releases/latest) sahifasidan faylni yuklab oling: Windows uchun `.exe`, macOS uchun `.dmg`.
+2. Ishga tushiring.
+   - **Windows** ogohlantirsa: **Подробнее / More info** → **Выполнить в любом случае / Run anyway**.
+   - **macOS** bloklasa: System Settings → Privacy & Security → **Open Anyway**.
+3. Birinchi ishga tushirishda sozlash ustasi Claude Code'ni o'rnatadi va akkauntingizga kirishga yordam beradi.
+
+Yoki AI-agentingiz bo'lsa, [yuqoridagi promptni](#-install-with-an-ai-agent) unga nusxalang — o'zi o'rnatib beradi.
+
+### AI qanday ishlaydi
+
+Panda sizning o'z **Claude** obunangiz (Pro/Max) orqali, kompyuteringizdagi Claude Code yordamida ishlaydi. Grafik va indikatorlar obunasiz ham ishlaydi. Dastur interfeysi hozircha rus tilida.
+
+### Ogohlantirish
+
+Bu o'rganish va tahlil uchun vosita, **investitsiya maslahati emas**. Moliyaviy bozorlarda savdo qilish pul yo'qotish xavfi bilan bog'liq.
 
 ---
 

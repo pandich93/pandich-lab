@@ -1,6 +1,6 @@
 {
   "name": "pandich-lab",
-  "version": "0.1.0",
+  "version": "0.2.2",
   "description": "Local open-source charting + AI workbench: Claude writes, tests and draws Pine Script v6 indicators via PineTS",
   "main": "server.mjs",
   "scripts": {
@@ -25,5 +25,9 @@
     "lightweight-charts",
     "xauusd",
     "metatrader5"
-  ]
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pandich93/pandich-lab.git"
+  }
 }
