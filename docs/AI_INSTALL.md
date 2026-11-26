@@ -28,6 +28,8 @@ Steps
    On anything else use the "From source" fallback at the end.
 2. Read https://api.github.com/repos/pandich93/pandich-lab/releases/latest and pick the asset:
    Windows -> PandichLab-<version>-win-x64.exe ; macOS -> PandichLab-<version>-mac-universal.dmg
+   (the same files are also attached as PandichLab-Setup.exe / PandichLab-mac.dmg; prefer the versioned names,
+   their checksums are listed in latest.yml / latest-mac.yml)
    Tell me the version, file name, size and URL, then download it to my Downloads folder.
    Verify the download: the size must match the API, and the SHA-512 (base64) must match the value in the
    release asset latest.yml (Windows) or latest-mac.yml (macOS). If it does not match, delete the file and stop.

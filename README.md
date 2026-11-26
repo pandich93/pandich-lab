@@ -10,7 +10,9 @@ Free · open source · runs locally on Windows and macOS
 [![License](https://img.shields.io/badge/license-AGPL--3.0-26a69a)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-555)
 
-[**⬇ Download**](https://github.com/pandich93/pandich-lab/releases/latest) · [English](#english) · [Русский](#русский) · [O'zbekcha](#ozbekcha) · [Install with AI](#-install-with-an-ai-agent)
+### [⬇ Windows](https://github.com/pandich93/pandich-lab/releases/latest/download/PandichLab-Setup.exe) &nbsp;·&nbsp; [⬇ macOS](https://github.com/pandich93/pandich-lab/releases/latest/download/PandichLab-mac.dmg)
+
+[English](#english) · [Русский](#русский) · [O'zbekcha](#ozbekcha) · [Install with AI](#-install-with-an-ai-agent)
 
 ![Pandich Lab: four synced charts and the Panda assistant](docs/img/hero.jpg)
 
@@ -22,18 +24,16 @@ Free · open source · runs locally on Windows and macOS
 
 ## ⬇ Download
 
-| System | File | Install |
-|---|---|---|
-| Windows 10/11 (x64) | `PandichLab-x.y.z-win-x64.exe` | double-click; no admin rights |
-| macOS 12+ (Apple Silicon & Intel) | `PandichLab-x.y.z-mac-universal.dmg` | drag to Applications |
+Click one link — the download starts immediately:
 
-Get both from [**Releases**](https://github.com/pandich93/pandich-lab/releases/latest). The app updates itself.
+- **Windows 10/11:** [PandichLab-Setup.exe](https://github.com/pandich93/pandich-lab/releases/latest/download/PandichLab-Setup.exe) → double-click → done (no admin rights).
+- **macOS 12+ (Apple Silicon & Intel):** [PandichLab-mac.dmg](https://github.com/pandich93/pandich-lab/releases/latest/download/PandichLab-mac.dmg) → drag *Pandich Lab* into Applications.
 
 > The installers are not code-signed yet.
 > - **Windows:** "Windows protected your PC" → **More info** → **Run anyway**.
 > - **macOS:** System Settings → Privacy & Security → **Open Anyway**. The macOS build is new and less tested than Windows; please report problems in Issues.
 
-The interface is currently in Russian. The Panda assistant answers in the language you write in.
+On first launch a setup wizard installs Claude Code (for the AI assistant) and helps you sign in. The app updates itself. The interface is currently in Russian; the Panda assistant answers in the language you write in.
 
 ## 🤖 Install with an AI agent
 
@@ -57,6 +57,8 @@ Steps
    On anything else use the "From source" fallback at the end.
 2. Read https://api.github.com/repos/pandich93/pandich-lab/releases/latest and pick the asset:
    Windows -> PandichLab-<version>-win-x64.exe ; macOS -> PandichLab-<version>-mac-universal.dmg
+   (the same files are also attached as PandichLab-Setup.exe / PandichLab-mac.dmg; prefer the versioned names,
+   their checksums are listed in latest.yml / latest-mac.yml)
    Tell me the version, file name, size and URL, then download it to my Downloads folder.
    Verify the download: the size must match the API, and the SHA-512 (base64) must match the value in the
    release asset latest.yml (Windows) or latest-mac.yml (macOS). If it does not match, delete the file and stop.
@@ -129,7 +131,7 @@ Panda работает через твой собственный Claude:
 
 ### Приложение для Windows и macOS
 
-Готовые установщики лежат в [Releases](../../releases):
+Скачать сразу: **Windows** — [PandichLab-Setup.exe](https://github.com/pandich93/pandich-lab/releases/latest/download/PandichLab-Setup.exe), **macOS** — [PandichLab-mac.dmg](https://github.com/pandich93/pandich-lab/releases/latest/download/PandichLab-mac.dmg). Все версии — в [Releases](../../releases):
 - **Windows 10/11 (x64):** `PandichLab-x.y.z-win-x64.exe`. Двойной клик, и приложение установится без прав администратора.
 - **macOS (Apple Silicon и Intel):** `PandichLab-x.y.z-mac-universal.dmg`. Перетащи приложение в «Программы».
 
@@ -305,7 +307,7 @@ Imkoniyatlar:
 
 ### O'rnatish
 
-1. [Releases](https://github.com/pandich93/pandich-lab/releases/latest) sahifasidan faylni yuklab oling: Windows uchun `.exe`, macOS uchun `.dmg`.
+1. Faylni yuklab oling: **Windows** — [PandichLab-Setup.exe](https://github.com/pandich93/pandich-lab/releases/latest/download/PandichLab-Setup.exe), **macOS** — [PandichLab-mac.dmg](https://github.com/pandich93/pandich-lab/releases/latest/download/PandichLab-mac.dmg).
 2. Ishga tushiring.
    - **Windows** ogohlantirsa: **Подробнее / More info** → **Выполнить в любом случае / Run anyway**.
    - **macOS** bloklasa: System Settings → Privacy & Security → **Open Anyway**.
