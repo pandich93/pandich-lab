@@ -1,0 +1,28 @@
+// @name VWAP дневной + полосы σ
+// @category Тренд
+// @desc VWAP с обнулением в начале каждого дня (UTC) и полосами стандартного отклонения.
+// @tags ввап вап vwap
+//@version=6
+indicator("VWAP + σ", overlay = true)
+m1 = input.float(1.0, "Полоса 1 (σ)", step = 0.5)
+m2 = input.float(2.0, "Полоса 2 (σ)", step = 0.5)
+newDay = ta.change(time("D")) != 0
+var float sumPV = 0.0
+var float sumV = 0.0
+var float sumPV2 = 0.0
+v = nz(volume, 1)
+if newDay
+    sumPV := 0.0
+    sumV := 0.0
+    sumPV2 := 0.0
+sumPV += hlc3 * v
+sumV += v
+sumPV2 += hlc3 * hlc3 * v
+vw = sumV > 0 ? sumPV / sumV : hlc3
+dev = math.sqrt(math.max(sumV > 0 ? sumPV2 / sumV - vw * vw : 0.0, 0.0))
+plot(vw, "VWAP", color = #ff9800, linewidth = 2, style = plot.style_linebr)
+plot(vw + m1 * dev, "+1σ", color = color.new(#26a69a, 30), style = plot.style_linebr)
+plot(vw - m1 * dev, "−1σ", color = color.new(#26a69a, 30), style = plot.style_linebr)
+plot(vw + m2 * dev, "+2σ", color = color.new(#ef5350, 30), style = plot.style_linebr)
+plot(vw - m2 * dev, "−2σ", color = color.new(#ef5350, 30), style = plot.style_linebr)
+alertcondition(ta.cross(close, vw), "Пересечение VWAP", "Цена пересекла VWAP")

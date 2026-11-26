@@ -1,0 +1,17 @@
+// @name Supertrend
+// @category Тренд
+// @desc ATR-трейлинг тренда; смена направления — сигнал.
+// @tags супертренд
+//@version=6
+indicator("Supertrend", overlay = true)
+atrLen = input.int(10, "Период ATR", minval = 1)
+factor = input.float(3.0, "Множитель", step = 0.1)
+[st, dir] = ta.supertrend(factor, atrLen)
+plot(dir < 0 ? st : na, "Вверх", color = #26a69a, linewidth = 2, style = plot.style_linebr)
+plot(dir > 0 ? st : na, "Вниз", color = #ef5350, linewidth = 2, style = plot.style_linebr)
+flipUp = dir < 0 and dir[1] > 0
+flipDn = dir > 0 and dir[1] < 0
+plotshape(flipUp, "Покупка", shape.triangleup, location.belowbar, #26a69a, size = size.small)
+plotshape(flipDn, "Продажа", shape.triangledown, location.abovebar, #ef5350, size = size.small)
+alertcondition(flipUp, "Supertrend вверх", "Supertrend развернулся вверх")
+alertcondition(flipDn, "Supertrend вниз", "Supertrend развернулся вниз")

@@ -1,0 +1,10 @@
+// @name OBV
+// @category Объём
+// @desc On-Balance Volume и его средняя.
+// @tags обв
+//@version=6
+indicator("OBV", overlay = false)
+len = input.int(20, "Средняя", minval = 1)
+o = ta.cum(math.sign(ta.change(close)) * nz(volume))
+plot(o, "OBV", color = #2962ff)
+plot(ta.ema(o, len), "EMA OBV", color = #ff9800)

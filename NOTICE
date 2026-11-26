@@ -1,0 +1,32 @@
+Pandich Lab
+Copyright (C) 2026 Pandich Lab contributors
+Licensed under the GNU Affero General Public License v3.0 only (see LICENSE).
+
+This product includes or depends on the following third-party software:
+
+1. PineTS (npm: pinets) — Pine Script runtime for JavaScript
+   https://www.npmjs.com/package/pinets
+   License: GNU AGPL v3.0. Because Pandich Lab uses PineTS, the whole project is
+   distributed under the AGPL v3.0.
+
+2. TradingView Lightweight Charts™ (npm: lightweight-charts)
+   Copyright (c) TradingView, Inc. — https://www.tradingview.com/
+   License: Apache License 2.0. The license requires specifying TradingView as the
+   product creator; Pandich Lab keeps the TradingView attribution logo/link enabled on
+   every chart (layout.attributionLogo = true) and credits TradingView in README.
+
+3. Monaco Editor (npm: monaco-editor)
+   Copyright (c) Microsoft Corporation
+   License: MIT.
+
+4. MetaTrader5 Python package (optional, installed by the user on Windows)
+   Copyright (c) MetaQuotes Ltd. Used only to read market data from the user's own
+   running terminal. Not redistributed with Pandich Lab.
+
+Market data: Binance public market data (data-api.binance.vision) and, optionally,
+the user's own MetaTrader 5 broker account. Pandich Lab does not redistribute data;
+each user fetches it locally under the respective provider's terms.
+
+Trademarks: Pine Script® is a trademark of TradingView, Inc. Claude and Claude Code are
+trademarks of Anthropic, PBC. MetaTrader is a trademark of MetaQuotes Ltd. Pandich Lab is
+an independent project, not affiliated with or endorsed by any of them.

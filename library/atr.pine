@@ -1,0 +1,10 @@
+// @name ATR
+// @category Волатильность
+// @desc Средний истинный диапазон (в ценах и в % от цены).
+// @tags атр
+//@version=6
+indicator("ATR", overlay = false)
+len = input.int(14, "Период", minval = 1)
+a = ta.atr(len)
+plot(a, "ATR", color = #ef5350, linewidth = 2)
+plot(a / close * 100, "ATR %", color = color.new(#9e9e9e, 100), display = display.data_window)

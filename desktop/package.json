@@ -1,0 +1,107 @@
+{
+  "name": "pandich-lab-desktop",
+  "productName": "Pandich Lab",
+  "version": "0.2.1",
+  "description": "Pandich Lab desktop app: chart + Panda AI workbench for Pine Script v6",
+  "main": "main.js",
+  "author": "pandich",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win --x64 --publish never",
+    "dist:mac": "electron-builder --mac --publish never",
+    "release": "electron-builder -c.publish.provider=github --publish always"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.11"
+  },
+  "devDependencies": {
+    "electron": "45.5.0",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "com.pandich.lab",
+    "productName": "Pandich Lab",
+    "artifactName": "PandichLab-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "setup.html",
+      "setup.js",
+      "build/icon.png",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "..",
+        "to": "server",
+        "filter": [
+          "server.mjs",
+          "mt5bridge.py",
+          "package.json",
+          "LICENSE",
+          "NOTICE",
+          "public/**",
+          "library/**",
+          "agent/ql.mjs",
+          "agent/system.md"
+        ]
+      },
+      {
+        "from": "../node_modules",
+        "to": "server/node_modules",
+        "filter": [
+          "**/*",
+          "!.bin/**",
+          "!@types/**",
+          "!monaco-editor/esm/**",
+          "!monaco-editor/dev/**",
+          "!monaco-editor/min-maps/**",
+          "!**/*.map"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Pandich Lab",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "category": "public.app-category.finance",
+      "icon": "build/icon.png",
+      "notarize": false
+    },
+    "dmg": {
+      "title": "Pandich Lab ${version}"
+    },
+    "publish": null
+  }
+}

@@ -1,0 +1,44 @@
+# Builds the Pandich Lab desktop app for Windows (.exe installer) and macOS (.dmg, universal).
+# Push a tag like v0.2.0 → installers are attached to a GitHub Release (auto-update reads them).
+# Run manually (Actions → Desktop build → Run workflow) → installers only as downloadable artifacts.
+name: Desktop build
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Server dependencies
+        run: npm ci --omit=dev
+      - name: Desktop dependencies
+        working-directory: desktop
+        run: npm ci
+      - name: Build installer
+        working-directory: desktop
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          TARGET=$([ "$RUNNER_OS" = "Windows" ] && echo "--win --x64" || echo "--mac")
+          PUBLISH=$([[ "$GITHUB_REF" == refs/tags/* ]] && echo "always" || echo "never")
+          npx electron-builder $TARGET -c.publish.provider=github --publish $PUBLISH
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PandichLab-${{ runner.os }}
+          path: |
+            desktop/dist/*.exe
+            desktop/dist/*.dmg
+          if-no-files-found: error

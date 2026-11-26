@@ -1,0 +1,31 @@
+// @name Торговые сессии (Азия / Лондон / Нью-Йорк)
+// @category Уровни
+// @desc Подсветка сессий по UTC и максимум/минимум каждой сессии.
+// @tags session азия лондон
+//@version=6
+indicator("Сессии", overlay = true)
+aS = input.int(0, "Азия: начало (час UTC)", minval = 0, maxval = 23)
+aE = input.int(8, "Азия: конец", minval = 0, maxval = 24)
+lS = input.int(7, "Лондон: начало", minval = 0, maxval = 23)
+lE = input.int(16, "Лондон: конец", minval = 0, maxval = 24)
+nS = input.int(12, "Нью-Йорк: начало", minval = 0, maxval = 23)
+nE = input.int(21, "Нью-Йорк: конец", minval = 0, maxval = 24)
+h = hour(time, "UTC")
+inA = h >= aS and h < aE
+inL = h >= lS and h < lE
+inN = h >= nS and h < nE
+bgcolor(inA ? color.new(#2962ff, 92) : na, title = "Азия")
+bgcolor(inL ? color.new(#26a69a, 92) : na, title = "Лондон")
+bgcolor(inN ? color.new(#ff9800, 92) : na, title = "Нью-Йорк")
+var float aH = na
+var float aL = na
+if inA and not inA[1]
+    aH := high
+    aL := low
+else if inA
+    aH := math.max(aH, high)
+    aL := math.min(aL, low)
+plot(not inA ? aH : na, "Азия High", color = color.new(#2962ff, 20), style = plot.style_linebr)
+plot(not inA ? aL : na, "Азия Low", color = color.new(#2962ff, 20), style = plot.style_linebr)
+alertcondition(not inA and ta.crossover(close, aH), "Пробой максимума Азии", "Закрытие выше High азиатской сессии")
+alertcondition(not inA and ta.crossunder(close, aL), "Пробой минимума Азии", "Закрытие ниже Low азиатской сессии")

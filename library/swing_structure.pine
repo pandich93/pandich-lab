@@ -1,0 +1,25 @@
+// @name Рыночная структура: HH / HL / LH / LL
+// @category Структура
+// @desc Свинги по пивотам, подписи HH/HL/LH/LL и слом структуры (BOS) по закрытию.
+// @tags bos choch smc свинги
+//@version=6
+indicator("Структура HH/HL/LH/LL", overlay = true, max_labels_count = 300)
+len = input.int(5, "Сила свинга (баров с каждой стороны)", minval = 1)
+ph = ta.pivothigh(high, len, len)
+pl = ta.pivotlow(low, len, len)
+var float lastH = na
+var float lastL = na
+if not na(ph)
+    txt = na(lastH) ? "H" : ph > lastH ? "HH" : "LH"
+    label.new(bar_index - len, ph, txt, style = label.style_label_down, color = color.new(#ef5350, 70), textcolor = color.white, size = size.tiny)
+    lastH := ph
+if not na(pl)
+    txt = na(lastL) ? "L" : pl > lastL ? "HL" : "LL"
+    label.new(bar_index - len, pl, txt, style = label.style_label_up, color = color.new(#26a69a, 70), textcolor = color.white, size = size.tiny)
+    lastL := pl
+bosUp = not na(lastH) and ta.crossover(close, lastH)
+bosDn = not na(lastL) and ta.crossunder(close, lastL)
+plotshape(bosUp, "BOS вверх", shape.labelup, location.belowbar, color.new(#26a69a, 0), text = "BOS", textcolor = color.white, size = size.tiny)
+plotshape(bosDn, "BOS вниз", shape.labeldown, location.abovebar, color.new(#ef5350, 0), text = "BOS", textcolor = color.white, size = size.tiny)
+alertcondition(bosUp, "BOS вверх", "Слом структуры вверх: закрытие выше последнего свинг-хая")
+alertcondition(bosDn, "BOS вниз", "Слом структуры вниз: закрытие ниже последнего свинг-лоя")

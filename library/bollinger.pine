@@ -1,0 +1,15 @@
+// @name Полосы Боллинджера
+// @category Волатильность
+// @desc Средняя ± k стандартных отклонений; сигнал при выходе за полосы.
+// @tags bb боллинджер bollinger
+//@version=6
+indicator("Полосы Боллинджера", overlay = true)
+len = input.int(20, "Период", minval = 1)
+mult = input.float(2.0, "Множитель", step = 0.1)
+[mid, up, dn] = ta.bb(close, len, mult)
+plot(mid, "Средняя", color = #2962ff)
+p1 = plot(up, "Верхняя", color = color.new(#26a69a, 0))
+p2 = plot(dn, "Нижняя", color = color.new(#ef5350, 0))
+fill(p1, p2, color = color.new(#2962ff, 92))
+alertcondition(ta.crossover(close, up), "Выход вверх", "Закрытие выше верхней полосы")
+alertcondition(ta.crossunder(close, dn), "Выход вниз", "Закрытие ниже нижней полосы")

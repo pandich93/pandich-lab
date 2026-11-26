@@ -1,0 +1,16 @@
+// @name MACD
+// @category Осцилляторы
+// @desc MACD, сигнальная линия и гистограмма.
+// @tags макд
+//@version=6
+indicator("MACD", overlay = false)
+fast = input.int(12, "Быстрая", minval = 1)
+slow = input.int(26, "Медленная", minval = 1)
+sig = input.int(9, "Сигнальная", minval = 1)
+[m, s, h] = ta.macd(close, fast, slow, sig)
+plot(h, "Гистограмма", style = plot.style_columns, color = h >= 0 ? (h > h[1] ? #26a69a : #b2dfdb) : (h < h[1] ? #ef5350 : #ffcdd2))
+plot(m, "MACD", color = #2962ff)
+plot(s, "Сигнал", color = #ff9800)
+hline(0, "Ноль", color = color.new(#9e9e9e, 60))
+alertcondition(ta.crossover(m, s), "MACD вверх", "MACD пересёк сигнальную вверх")
+alertcondition(ta.crossunder(m, s), "MACD вниз", "MACD пересёк сигнальную вниз")

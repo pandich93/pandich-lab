@@ -1,0 +1,21 @@
+# dependencies
+node_modules/
+
+# personal data — never commit
+data/
+scripts/
+agent/work/
+config.json
+mt5_offset.json
+.plans/
+*.log
+*.tmp
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+desktop/node_modules/
+desktop/dist/
+_public/

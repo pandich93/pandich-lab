@@ -1,0 +1,18 @@
+// @name Сжатие волатильности (BB внутри KC)
+// @category Волатильность
+// @desc Точки: сжатие (красные) / отпускание (зелёные); гистограмма — импульс.
+// @tags squeeze ttm сквиз
+//@version=6
+indicator("Сжатие BB/KC", overlay = false)
+len = input.int(20, "Период", minval = 1)
+bbM = input.float(2.0, "BB множитель", step = 0.1)
+kcM = input.float(1.5, "KC множитель", step = 0.1)
+basis = ta.sma(close, len)
+dev = bbM * ta.stdev(close, len)
+rng = kcM * ta.atr(len)
+sqzOn = basis - dev > basis - rng and basis + dev < basis + rng
+mid = math.avg(math.avg(ta.highest(high, len), ta.lowest(low, len)), basis)
+mom = ta.linreg(close - mid, len, 0)
+plot(mom, "Импульс", style = plot.style_columns, color = mom >= 0 ? (mom > mom[1] ? #26a69a : #b2dfdb) : (mom < mom[1] ? #ef5350 : #ffcdd2))
+plot(0, "Сжатие", color = sqzOn ? #ef5350 : #26a69a, style = plot.style_circles, linewidth = 3)
+alertcondition(sqzOn[1] and not sqzOn, "Сжатие отпущено", "Полосы Боллинджера вышли из каналов Кельтнера")

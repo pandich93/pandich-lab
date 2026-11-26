@@ -1,0 +1,19 @@
+// @name Скользящие средние 20/50/200
+// @category Тренд
+// @desc EMA или SMA трёх периодов; сигнал при пересечении быстрой и средней.
+// @tags ema sma мувинг средняя
+//@version=6
+indicator("Скользящие средние 20/50/200", overlay = true)
+kind = input.string("EMA", "Тип", options = ["EMA", "SMA"])
+l1 = input.int(20, "Быстрая", minval = 1)
+l2 = input.int(50, "Средняя", minval = 1)
+l3 = input.int(200, "Медленная", minval = 1)
+ma(src, len) => kind == "EMA" ? ta.ema(src, len) : ta.sma(src, len)
+m1 = ma(close, l1)
+m2 = ma(close, l2)
+m3 = ma(close, l3)
+plot(m1, "Быстрая", color = color.new(#f7a600, 0), linewidth = 1)
+plot(m2, "Средняя", color = color.new(#2962ff, 0), linewidth = 2)
+plot(m3, "Медленная", color = color.new(#e91e63, 0), linewidth = 2)
+alertcondition(ta.crossover(m1, m2), "Быстрая выше средней", "MA: быстрая пересекла среднюю вверх")
+alertcondition(ta.crossunder(m1, m2), "Быстрая ниже средней", "MA: быстрая пересекла среднюю вниз")

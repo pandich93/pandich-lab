@@ -1,0 +1,21 @@
+// @name Ишимоку
+// @category Тренд
+// @desc Тенкан, Киджун, облако (сдвиг вперёд), Чикоу.
+// @tags ichimoku
+//@version=6
+indicator("Ишимоку", overlay = true)
+tl = input.int(9, "Тенкан", minval = 1)
+kl = input.int(26, "Киджун", minval = 1)
+sl = input.int(52, "Сенкоу B", minval = 1)
+off = input.int(26, "Сдвиг", minval = 1)
+donch(len) => math.avg(ta.lowest(len), ta.highest(len))
+tenkan = donch(tl)
+kijun = donch(kl)
+spanA = math.avg(tenkan, kijun)
+spanB = donch(sl)
+plot(tenkan, "Тенкан", color = #2962ff)
+plot(kijun, "Киджун", color = #b71c1c)
+plot(close, "Чикоу", color = color.new(#43a047, 20), offset = -off + 1)
+a = plot(spanA, "Сенкоу A", color = color.new(#26a69a, 40), offset = off - 1)
+b = plot(spanB, "Сенкоу B", color = color.new(#ef5350, 40), offset = off - 1)
+fill(a, b, color = spanA > spanB ? color.new(#26a69a, 88) : color.new(#ef5350, 88))

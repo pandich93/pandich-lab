@@ -1,0 +1,16 @@
+// @name RSI с зонами 30/70
+// @category Осцилляторы
+// @desc RSI, уровни перекупленности/перепроданности, алерты на выход из зон.
+// @tags рси
+//@version=6
+indicator("RSI", overlay = false)
+len = input.int(14, "Период", minval = 1)
+ob = input.int(70, "Перекупленность")
+os = input.int(30, "Перепроданность")
+r = ta.rsi(close, len)
+plot(r, "RSI", color = #7e57c2, linewidth = 2)
+hline(ob, "Перекупленность", color = color.new(#ef5350, 30))
+hline(50, "Середина", color = color.new(#9e9e9e, 60))
+hline(os, "Перепроданность", color = color.new(#26a69a, 30))
+alertcondition(ta.crossover(r, os), "RSI вверх из зоны", "RSI вышел из перепроданности")
+alertcondition(ta.crossunder(r, ob), "RSI вниз из зоны", "RSI вышел из перекупленности")

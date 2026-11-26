@@ -1,0 +1,16 @@
+// @name Уровни прошлого дня и недели
+// @category Уровни
+// @desc High/Low/Close вчерашнего дня и прошлой недели (без перерисовки).
+// @tags pdh pdl
+//@version=6
+indicator("Уровни прошлого дня/недели", overlay = true)
+showW = input.bool(true, "Показывать неделю")
+[pdh, pdl, pdc] = request.security(syminfo.tickerid, "D", [high[1], low[1], close[1]], lookahead = barmerge.lookahead_on)
+[pwh, pwl] = request.security(syminfo.tickerid, "W", [high[1], low[1]], lookahead = barmerge.lookahead_on)
+plot(pdh, "PDH", color = #26a69a, style = plot.style_linebr, linewidth = 2)
+plot(pdl, "PDL", color = #ef5350, style = plot.style_linebr, linewidth = 2)
+plot(pdc, "PDC", color = color.new(#9e9e9e, 30), style = plot.style_linebr)
+plot(showW ? pwh : na, "PWH", color = color.new(#26a69a, 40), style = plot.style_linebr)
+plot(showW ? pwl : na, "PWL", color = color.new(#ef5350, 40), style = plot.style_linebr)
+alertcondition(ta.crossover(close, pdh), "Пробой PDH", "Закрытие выше максимума вчерашнего дня")
+alertcondition(ta.crossunder(close, pdl), "Пробой PDL", "Закрытие ниже минимума вчерашнего дня")

@@ -1,0 +1,30 @@
+// @name Fair Value Gaps (FVG)
+// @category Структура
+// @desc Трёхсвечные разрывы; зона удаляется, когда цена её заполнила.
+// @tags фвг имбаланс дисбаланс imbalance
+//@version=6
+indicator("Fair Value Gaps", overlay = true, max_boxes_count = 200)
+minPct = input.float(0.0, "Мин. размер, % от цены", step = 0.01)
+ext = input.int(30, "Продлить вправо, баров", minval = 1)
+var array<box> bulls = array.new<box>()
+var array<box> bears = array.new<box>()
+bullGap = low > high[2] and (low - high[2]) / close * 100 >= minPct
+bearGap = high < low[2] and (low[2] - high) / close * 100 >= minPct
+if bullGap
+    array.push(bulls, box.new(bar_index - 2, low, bar_index + ext, high[2], border_color = color.new(#26a69a, 60), bgcolor = color.new(#26a69a, 85)))
+if bearGap
+    array.push(bears, box.new(bar_index - 2, low[2], bar_index + ext, high, border_color = color.new(#ef5350, 60), bgcolor = color.new(#ef5350, 85)))
+if array.size(bulls) > 0
+    for i = array.size(bulls) - 1 to 0
+        b = array.get(bulls, i)
+        if low <= box.get_bottom(b)
+            box.delete(b)
+            array.remove(bulls, i)
+if array.size(bears) > 0
+    for i = array.size(bears) - 1 to 0
+        b = array.get(bears, i)
+        if high >= box.get_top(b)
+            box.delete(b)
+            array.remove(bears, i)
+alertcondition(bullGap, "Бычий FVG", "Новый бычий разрыв справедливой стоимости")
+alertcondition(bearGap, "Медвежий FVG", "Новый медвежий разрыв справедливой стоимости")

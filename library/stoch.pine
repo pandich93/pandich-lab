@@ -1,0 +1,17 @@
+// @name Стохастик
+// @category Осцилляторы
+// @desc %K и %D с уровнями 20/80.
+// @tags stochastic стох
+//@version=6
+indicator("Стохастик", overlay = false)
+kLen = input.int(14, "%K", minval = 1)
+kSm = input.int(3, "Сглаживание %K", minval = 1)
+dLen = input.int(3, "%D", minval = 1)
+k = ta.sma(ta.stoch(close, high, low, kLen), kSm)
+d = ta.sma(k, dLen)
+plot(k, "%K", color = #2962ff)
+plot(d, "%D", color = #ff9800)
+hline(80, "80", color = color.new(#ef5350, 40))
+hline(20, "20", color = color.new(#26a69a, 40))
+alertcondition(ta.crossover(k, d) and k < 20, "Пересечение вверх в зоне 20", "Стохастик: %K выше %D ниже 20")
+alertcondition(ta.crossunder(k, d) and k > 80, "Пересечение вниз в зоне 80", "Стохастик: %K ниже %D выше 80")

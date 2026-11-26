@@ -1,0 +1,12 @@
+// @name Parabolic SAR
+// @category Тренд
+// @desc Точки разворота Параболика.
+// @tags параболик сар
+//@version=6
+indicator("Parabolic SAR", overlay = true)
+start = input.float(0.02, "Старт", step = 0.01)
+inc = input.float(0.02, "Шаг", step = 0.01)
+mx = input.float(0.2, "Максимум", step = 0.05)
+s = ta.sar(start, inc, mx)
+plot(s, "SAR", color = close > s ? #26a69a : #ef5350, style = plot.style_cross, linewidth = 2)
+alertcondition(ta.cross(close, s), "Разворот SAR", "Parabolic SAR сменил сторону")

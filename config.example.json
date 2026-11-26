@@ -1,0 +1,5 @@
+{
+  "backend": "claude-code",
+  "model": "sonnet",
+  "claudeBin": "claude"
+}

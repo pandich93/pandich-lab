@@ -1,0 +1,15 @@
+// @name ADX / DMI
+// @category Тренд
+// @desc Сила тренда (ADX) и направление (+DI / −DI).
+// @tags адх дми
+//@version=6
+indicator("ADX / DMI", overlay = false)
+diLen = input.int(14, "Период DI", minval = 1)
+adxLen = input.int(14, "Сглаживание ADX", minval = 1)
+lvl = input.int(25, "Порог тренда")
+[plusDI, minusDI, adx] = ta.dmi(diLen, adxLen)
+plot(adx, "ADX", color = #ff9800, linewidth = 2)
+plot(plusDI, "+DI", color = #26a69a)
+plot(minusDI, "−DI", color = #ef5350)
+hline(lvl, "Порог", color = color.new(#9e9e9e, 50))
+alertcondition(ta.crossover(adx, lvl), "Начало тренда", "ADX поднялся выше порога")

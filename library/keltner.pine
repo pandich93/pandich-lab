@@ -1,0 +1,15 @@
+// @name Каналы Кельтнера
+// @category Волатильность
+// @desc EMA ± ATR×k.
+// @tags kc keltner
+//@version=6
+indicator("Каналы Кельтнера", overlay = true)
+len = input.int(20, "Период EMA", minval = 1)
+atrLen = input.int(10, "Период ATR", minval = 1)
+mult = input.float(2.0, "Множитель ATR", step = 0.1)
+mid = ta.ema(close, len)
+rng = ta.atr(atrLen) * mult
+plot(mid, "Средняя", color = #ff9800)
+a = plot(mid + rng, "Верх", color = color.new(#2962ff, 20))
+b = plot(mid - rng, "Низ", color = color.new(#2962ff, 20))
+fill(a, b, color = color.new(#2962ff, 93))

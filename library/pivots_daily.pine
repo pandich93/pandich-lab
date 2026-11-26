@@ -1,0 +1,21 @@
+// @name Пивоты классические (дневные)
+// @category Уровни
+// @desc P, R1–R3, S1–S3 по вчерашнему дню.
+// @tags pivot
+//@version=6
+indicator("Пивоты дневные", overlay = true)
+[h, l, c] = request.security(syminfo.tickerid, "D", [high[1], low[1], close[1]], lookahead = barmerge.lookahead_on)
+p = (h + l + c) / 3
+r1 = 2 * p - l
+s1 = 2 * p - h
+r2 = p + (h - l)
+s2 = p - (h - l)
+r3 = h + 2 * (p - l)
+s3 = l - 2 * (h - p)
+plot(p, "P", color = #ff9800, style = plot.style_linebr, linewidth = 2)
+plot(r1, "R1", color = color.new(#ef5350, 20), style = plot.style_linebr)
+plot(r2, "R2", color = color.new(#ef5350, 45), style = plot.style_linebr)
+plot(r3, "R3", color = color.new(#ef5350, 65), style = plot.style_linebr)
+plot(s1, "S1", color = color.new(#26a69a, 20), style = plot.style_linebr)
+plot(s2, "S2", color = color.new(#26a69a, 45), style = plot.style_linebr)
+plot(s3, "S3", color = color.new(#26a69a, 65), style = plot.style_linebr)
