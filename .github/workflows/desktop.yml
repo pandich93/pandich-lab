@@ -1,7 +1,9 @@
 # Builds the Pandich Lab desktop app for Windows (.exe installer) and macOS (.dmg, universal).
-# Push a tag like v0.2.0 → installers are attached to a GitHub Release (auto-update reads them).
-# Run manually (Actions → Desktop build → Run workflow): installers as downloadable artifacts;
-# tick "Publish a GitHub Release" to also create release v<version> from desktop/package.json.
+# Manual run (Actions → Desktop build → Run workflow): installers as downloadable artifacts;
+# tick "Publish a GitHub Release" to publish release v<version> from desktop/package.json.
+# A pushed tag v* publishes too.
+# Release assets: versioned files + latest*.yml + blockmaps (auto-update), and stable-name copies
+# for direct links:  …/releases/latest/download/PandichLab-Setup.exe  and  …/PandichLab-mac.dmg
 name: Desktop build
 on:
   push:
@@ -34,17 +36,42 @@ jobs:
       - name: Build installer
         working-directory: desktop
         shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DO_RELEASE: ${{ inputs.release }}
         run: |
           TARGET=$([ "$RUNNER_OS" = "Windows" ] && echo "--win --x64" || echo "--mac")
-          PUBLISH=$([[ "$GITHUB_REF" == refs/tags/* || "$DO_RELEASE" == "true" ]] && echo "always" || echo "never")
-          npx electron-builder $TARGET --publish $PUBLISH
+          npx electron-builder $TARGET --publish never
       - uses: actions/upload-artifact@v4
         with:
           name: PandichLab-${{ runner.os }}
           path: |
             desktop/dist/*.exe
             desktop/dist/*.dmg
+            desktop/dist/*.blockmap
+            desktop/dist/latest*.yml
           if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/') || inputs.release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VER=$(node -p "require('./desktop/package.json').version")
+          TAG="v$VER"
+          cd out
+          cp PandichLab-$VER-win-x64.exe PandichLab-Setup.exe
+          cp PandichLab-$VER-mac-universal.dmg PandichLab-mac.dmg
+          ls -la
+          NOTES="Windows: PandichLab-Setup.exe · macOS: PandichLab-mac.dmg. Not code-signed yet — Windows: More info → Run anyway; macOS: System Settings → Privacy & Security → Open Anyway."
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" * --clobber
+          else
+            gh release create "$TAG" * --title "Pandich Lab $VER" --notes "$NOTES" --latest
+          fi
