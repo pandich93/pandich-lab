@@ -664,6 +664,7 @@ $('barsSel').onchange = e => { S.limit = +e.target.value; store.set(K('ql.limit'
 // ───────── chat ─────────
 const msgs = $('messages');
 const PI = { // panel icons (18×18)
+  bell: '<svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5V8a4.5 4.5 0 019 0v4.5l1.2 1.5H3.3z"/><path d="M7.3 15.5a1.8 1.8 0 003.4 0"/></svg>',
   chart: '<svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5V2h3M13 2h3v3M16 13v3h-3M5 16H2v-3"/><circle cx="9" cy="9" r="2.5"/><path d="M3.5 9S5.5 5 9 5s5.5 4 5.5 4-2 4-5.5 4-5.5-4-5.5-4z"/></svg>',
   indicator: '<svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2v14h14"/><path d="M5 12l3-4 3 2 4-6"/></svg>',
   strategy: '<svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="9" cy="9" r="6.5"/><path d="M9 1v3.5M9 13.5V17M1 9h3.5M13.5 9H17"/></svg>',
@@ -674,56 +675,59 @@ const PI = { // panel icons (18×18)
   code: '<svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 5L2 9l4 4M12 5l4 4-4 4"/></svg>',
   refresh: '<svg viewBox="0 0 18 18" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 9a6 6 0 11-1.8-4.3M15 2.5v3.5h-3.5"/></svg>',
 };
-const BRAIN_POOL = [
-  'Спроецируй средний дневной диапазон от открытия дня верхней и нижней границей',
-  'Отмечай пробои внутреннего бара на объёме выше среднего и считай, как часто они отрабатывают',
-  'Сделай бэктест покупки, когда цена возвращается выше вчерашнего минимума после его снятия, со стопом под снятием',
-  'Покажи, в какие часы суток (UTC) у этого инструмента самый большой средний диапазон',
-  'Отмечай свечи-поглощения у локальных экстремумов и статистику следующих 5 баров',
-  'Построй уровни открытия азиатской, лондонской и нью-йоркской сессий',
-  'Сделай индикатор режима рынка: тренд / флэт по ADX и наклону EMA 200',
-  'Протестируй пробой диапазона первых 30 минут Лондона с целью 1.5R',
-  'Подсвечивай бары, где диапазон больше 2 ATR, и что происходит после них',
-  'Отмечай снятие ликвидности над максимумом прошлого дня с возвратом в диапазон',
-  'Посчитай, как часто цена закрывает гэп выходных в течение недели',
-  'Сделай мультитаймфреймовую панель тренда (15м/1ч/4ч/1д) в углу графика',
+// ── Panda start screen: task chips + examples (our own set, tuned for gold / crypto traders)
+const IDEAS = [
+  'Средний дневной ход: докуда цена обычно доходит от открытия дня',
+  'Гистограмма волатильности по часам UTC: когда рынок двигается сильнее всего',
+  'Как часто снимают максимум прошлого дня и возвращаются обратно — со статистикой',
+  'Панель тренда по четырём таймфреймам в углу графика',
+  'Уровни открытия Азии, Лондона и Нью-Йорка на каждый день',
+  'Фильтр «тренд или боковик», который можно добавить к любой стратегии',
+  'Свечи больше 2 ATR и что цена делает после них',
+  'Как часто в крипте закрывается гэп понедельника',
+  'Пробой первого часа Лондона — с честной статистикой без подгонки',
+  'Поглощения у локальных экстремумов и результат через 5 баров',
+  'Внутренний бар с объёмом выше среднего: стоит ли это торговать',
+  'Отклонение цены от VWAP в ATR — где рынок перегрет',
 ];
-const MODES = {
-  chart: { name: 'Мой график', snap: true, items: [
-    'Посмотри на мой график и скажи, какой сейчас тренд, где ключевые уровни и где разворачивается моментум',
-    'Найди на моём графике уровни, на которые цена постоянно реагирует, и нарисуй их',
-    'Разбери этот рынок на 4-часовом, часовом и 15-минутном таймфреймах и сведи общую картину',
-    'Переключись на дневной график, посмотри последние шесть месяцев и опиши общую картину'],
-    ph: ['Посмотри на мой график и скажи, где ближайшая поддержка', 'Нарисуй зоны спроса и предложения на моём графике', 'Есть ли сейчас сетап для входа?'] },
-  indicator: { name: 'Индикатор', items: [
-    'Отметь структуру рынка: повышающиеся максимумы, понижающиеся минимумы и каждый слом структуры',
-    'Выдели обычные и скрытые дивергенции RSI с меткой на каждом пивоте',
-    'Показывай сжатие волатильности, когда полосы Боллинджера уходят внутрь каналов Кельтнера',
-    'Нарисуй разрывы справедливой стоимости и убирай каждый, как только цена его заполнит'],
-    ph: ['Создай индикатор, который отмечает зоны спроса и предложения', 'Создай индикатор, который строит максимум, минимум и середину предыдущего дня', 'Создай индикатор VWAP с полосами стандартного отклонения'] },
-  strategy: { name: 'Стратегия', items: [
-    'Сделай бэктест пересечения EMA 20/50 со стопом по ATR и целью 2R',
-    'Создай стратегию, которая покупает, когда RSI опускается ниже 30, но только пока цена выше EMA 200',
-    'Торгуй пробои последнего свинг-максимума с трейлинг-стопом под предыдущим свинг-минимумом',
-    'Преврати пробой из сжатия Боллинджера в стратегию с трейлинг-стопом'],
-    ph: ['Сделай бэктест пробоя азиатской сессии с целью 2R', 'Создай стратегию на откат к EMA 50 в тренде'] },
-  fix: { name: 'Исправить мой код', prefix: true, items: [
-    'Исправь этот Pine Script®, чтобы он компилировался:',
-    'Конвертируй этот скрипт в Pine Script® v6:',
-    'Проверь этот скрипт на перерисовку и исправь её:',
-    'Объясни, что делает этот Pine Script®:'],
-    ph: ['Вставь код Pine Script и напиши, что с ним сделать'] },
-  screenshot: { name: 'По скриншоту', needImage: true, items: [
-    'Повтори индикатор со скриншота как можно точнее',
-    'Определи, что за индикатор на скриншоте, и объясни его логику',
-    'Сделай стратегию по сетапу, показанному на скриншоте'],
-    ph: ['Приложи скриншот (＋ или Ctrl+V) и опиши, что повторить'] },
-  brainstorm: { name: 'Мозговой штурм', brain: true, items: [],
-    ph: ['Предложи идеи индикаторов для скальпинга золота', 'Какие сетапы чаще всего отрабатывают на этом инструменте?'] },
+const TASKS = {
+  look: { name: 'Разбор графика', icon: 'chart', snap: true, ex: [
+    'Где сейчас ближайшие поддержка и сопротивление? Нарисуй их',
+    'Какой тренд на H4, H1 и M15 и совпадают ли они между собой?',
+    'Что цена делала за последнюю неделю и где был самый сильный импульс?'],
+    ph: ['Например: где ближайшая сильная поддержка?', 'Например: нарисуй зоны, от которых цена отскакивала чаще всего'] },
+  build: { name: 'Индикатор', icon: 'indicator', ex: [
+    'Отмечай свечи, которые закрываются за пределами вчерашнего диапазона',
+    'EMA 20 и EMA 50 — и зелёный фон, пока быстрая выше медленной',
+    'Метка, когда RSI выходит из перепроданности, а цена выше EMA 200'],
+    ph: ['Опишите индикатор, например: уровни максимума и минимума прошлой недели', 'Например: подсвечивай свечи с объёмом в 2 раза выше среднего'] },
+  test: { name: 'Бэктест', icon: 'strategy', ex: [
+    'Проверь на истории: покупка при возврате выше EMA 50, стоп 1 ATR, цель 2R',
+    'В какую сессию пробой утреннего диапазона даёт лучший результат?',
+    'Оцени честно: не подогнана ли эта стратегия под историю?'],
+    ph: ['Опишите правила входа и выхода — проверю их на истории', 'Например: продажа от максимума Азии со стопом 1.5 ATR'] },
+  alert: { name: 'Сигнал в Telegram', icon: 'bell', ex: [
+    'Сигнал, когда цена закрывается выше максимума прошлого дня',
+    'Сообщай, когда RSI на H1 опускается ниже 25',
+    'Пересечение EMA 9 и EMA 21, но только в лондонскую сессию'],
+    ph: ['Опишите условие сигнала — сделаю alert и подскажу, как включить Watch', 'Например: цена коснулась EMA 200 на H1'] },
+  code: { name: 'Код', icon: 'fix', prefix: true, ex: [
+    'Найди и исправь ошибку в этом скрипте:',
+    'Переведи этот скрипт на Pine v6:',
+    'Есть ли здесь перерисовка или заглядывание в будущее?',
+    'Объясни простыми словами, что считает этот код:'],
+    ph: ['Вставьте Pine-код и напишите, что с ним сделать'] },
+  pic: { name: 'По картинке', icon: 'screenshot', needImage: true, ex: [
+    'Собери похожий индикатор по этому скриншоту',
+    'Что за инструмент на картинке и как он, скорее всего, считается?'],
+    ph: ['Приложите картинку (＋ или Ctrl+V) и напишите, что повторить'] },
+  ideas: { name: 'Идеи', icon: 'brainstorm', ideas: true, ex: [],
+    ph: ['Например: какие инструменты помогут торговать золото внутри дня?'] },
 };
-const MODE_ORDER = ['chart', 'indicator', 'strategy', 'fix', 'screenshot', 'brainstorm'];
-let curMode = store.get('ql.mode', 'indicator'); if (!MODES[curMode]) curMode = 'indicator';
-let brainOffset = 0, phIdx = 0;
+const TASK_ORDER = ['look', 'build', 'test', 'alert', 'code', 'pic', 'ideas'];
+const LEGACY_TASK = { chart: 'look', indicator: 'build', strategy: 'test', fix: 'code', screenshot: 'pic', brainstorm: 'ideas' };
+let curTask = store.get('ql.task', 'build'); if (!TASKS[curTask]) curTask = 'build';
+let ideasOffset = 0, phIdx = 0, examplesOpen = true;
 S.attach = [];
 
 function setEmpty(empty) { $('chatPanel').classList.toggle('empty', empty); }
@@ -755,39 +759,35 @@ function addMsg(cls, html) {
 }
 function setBusy(b) { S.busy = b; $('sendBtn').disabled = b; $('stopBtn').classList.toggle('hidden', !b); }
 
-// ── modes + suggestion card
-function renderMode() {
-  const m = MODES[curMode];
-  $('modeIcon').innerHTML = PI[curMode]; $('modeName').textContent = m.name;
-  $('modeMenu').innerHTML = MODE_ORDER.map(k => `<button data-mode="${k}" class="${k === curMode ? 'on' : ''}"><span class="pi">${PI[k]}</span>${MODES[k].name}</button>`).join('');
-  $('modeMenu').querySelectorAll('button').forEach(b => b.onclick = () => { curMode = b.dataset.mode; store.set('ql.mode', curMode); $('modeMenu').classList.add('hidden'); $('suggest').classList.remove('closed'); phIdx = 0; renderMode(); });
-  const sg = $('suggest');
-  let items = m.items.map(t => ({ text: t }));
-  if (m.brain) {
-    items = [{ text: 'Посмотри на мой график и предложи индикатор, который поможет мне торговать на нём', snap: true, special: true }]
-      .concat([0, 1, 2].map(i => ({ text: BRAIN_POOL[(brainOffset + i) % BRAIN_POOL.length] })));
-  }
-  sg.innerHTML = `<div class="suggest-head"><span class="pi">${PI[curMode]}</span>${m.name}<div class="spacer"></div><button class="icon-btn" id="sgClose" title="Скрыть">✕</button></div>` +
-    items.map((it, i) => `<button class="sugg ${it.special ? 'special' : ''}" data-i="${i}">${it.special ? `<span class="pi">${PI.chart}</span>` : ''}<span>${esc(it.text)}</span></button>`).join('') +
-    (m.brain ? `<button class="sugg more" id="sgMore">${PI.refresh} Показать другие идеи</button>` : '');
-  sg.querySelectorAll('.sugg[data-i]').forEach(b => b.onclick = () => useSuggestion(items[+b.dataset.i]));
-  $('sgClose').onclick = () => sg.classList.add('closed');
-  const more = $('sgMore'); if (more) more.onclick = () => { brainOffset = (brainOffset + 3) % BRAIN_POOL.length; renderMode(); };
+// ── task chips + examples
+function renderTasks() {
+  const t = TASKS[curTask];
+  $('tasks').innerHTML = TASK_ORDER.map(k => `<button class="task ${k === curTask ? 'on' : ''}" data-task="${k}"><span class="pi">${PI[TASKS[k].icon]}</span>${TASKS[k].name}</button>`).join('');
+  $('tasks').querySelectorAll('.task').forEach(b => b.onclick = () => {
+    if (b.dataset.task === curTask) examplesOpen = !examplesOpen; else { curTask = b.dataset.task; store.set('ql.task', curTask); examplesOpen = true; phIdx = 0; }
+    renderTasks();
+  });
+  let items = t.ex.map(x => ({ text: x }));
+  if (t.ideas) items = [{ text: 'Посмотри на мой график и предложи три идеи индикатора именно под него', snap: true }]
+    .concat([0, 1, 2].map(i => ({ text: IDEAS[(ideasOffset + i) % IDEAS.length] })));
+  const ex = $('examples');
+  ex.classList.toggle('closed', !examplesOpen);
+  ex.innerHTML = `<div class="ex-h">Например:${t.ideas ? `<button class="ex-more" id="exMore" title="Другие идеи">${PI.refresh} ещё</button>` : ''}</div>` +
+    items.map((it, i) => `<button class="ex" data-i="${i}">${esc(it.text)}</button>`).join('');
+  ex.querySelectorAll('.ex[data-i]').forEach(b => b.onclick = () => useExample(items[+b.dataset.i]));
+  const more = $('exMore'); if (more) more.onclick = () => { ideasOffset = (ideasOffset + 3) % IDEAS.length; renderTasks(); };
   updatePlaceholder();
 }
-function updatePlaceholder() { const ph = MODES[curMode].ph; $('prompt').placeholder = ph[phIdx % ph.length]; }
+function updatePlaceholder() { const ph = TASKS[curTask].ph; $('prompt').placeholder = ph[phIdx % ph.length]; }
 setInterval(() => { if (!$('prompt').value && document.activeElement !== $('prompt')) { phIdx++; updatePlaceholder(); } }, 6000);
 
-async function useSuggestion(it) {
-  const m = MODES[curMode];
-  if (m.prefix) { const p = $('prompt'); p.value = it.text + '\n'; p.focus(); p.setSelectionRange(p.value.length, p.value.length); autoGrow(); return; }
-  if (m.needImage && !S.attach.some(a => a.kind === 'image')) { S.pendingText = it.text; $('fileImg').click(); return; }
-  send(it.text, { snap: !!(it.snap || m.snap) });
+async function useExample(it) {
+  const t = TASKS[curTask];
+  if (t.prefix) { const p = $('prompt'); p.value = it.text + '\n'; p.focus(); p.setSelectionRange(p.value.length, p.value.length); autoGrow(); return; }
+  if (t.needImage && !S.attach.some(a => a.kind === 'image')) { S.pendingText = it.text; $('fileImg').click(); return; }
+  send(it.text, { snap: !!(it.snap || t.snap) });
 }
-$('modeMain').onclick = () => $('suggest').classList.toggle('closed');
-$('modeCaret').onclick = e => { e.stopPropagation(); $('modeMenu').classList.toggle('hidden'); $('plusMenu').classList.add('hidden'); };
 document.addEventListener('click', e => {
-  if (!$('modeRow').contains(e.target)) $('modeMenu').classList.add('hidden');
   if (!$('composer').contains(e.target)) $('plusMenu').classList.add('hidden');
 });
 
@@ -827,7 +827,7 @@ async function addImages(files) {
   renderAttach();
   if (S.pendingText && S.attach.some(a => a.kind === 'image')) { const p = $('prompt'); p.value = S.pendingText; S.pendingText = null; p.focus(); autoGrow(); }
 }
-$('plusBtn').onclick = e => { e.stopPropagation(); $('plusMenu').classList.toggle('hidden'); $('modeMenu').classList.add('hidden'); };
+$('plusBtn').onclick = e => { e.stopPropagation(); $('plusMenu').classList.toggle('hidden'); };
 $('plusMenu').querySelectorAll('.pi[data-icon]').forEach(sp => sp.innerHTML = PI[sp.dataset.icon]);
 $('plusMenu').querySelectorAll('button').forEach(b => b.onclick = () => {
   $('plusMenu').classList.add('hidden');
@@ -889,9 +889,9 @@ async function applyAgentScript(targetRef, name, code, result) {
 async function send(text, opts = {}) {
   text = (text || '').trim();
   if ((!text && !S.attach.length) || S.busy) return;
-  if (!text) text = curMode === 'screenshot' ? 'Повтори индикатор со скриншота' : 'Посмотри на вложение';
+  if (!text) text = curTask === 'pic' ? 'Собери похожий индикатор по этой картинке' : 'Посмотри на вложение';
   const atts = S.attach.slice(); S.attach = []; renderAttach();
-  if ((opts.snap || MODES[curMode].snap) && !atts.some(a => a.chart)) { try { atts.unshift({ kind: 'image', label: `${S.symbol} ${S.interval}`, dataUrl: chartSnapshot(), chart: true }); } catch (e) { log('snapshot: ' + e.message); } }
+  if ((opts.snap || TASKS[curTask].snap) && !atts.some(a => a.chart)) { try { atts.unshift({ kind: 'image', label: `${S.symbol} ${S.interval}`, dataUrl: chartSnapshot(), chart: true }); } catch (e) { log('snapshot: ' + e.message); } }
   $('prompt').value = ''; autoGrow();
   const thumbs = atts.map(a => a.kind === 'image' ? `<img class="mthumb" src="${a.dataUrl}" title="${esc(a.label)}">` : `<span class="mfile">${PI.code} ${esc(a.name)}</span>`).join('');
   addMsg('user', (thumbs ? `<div class="matt">${thumbs}</div>` : '') + esc(text));
@@ -906,7 +906,7 @@ async function send(text, opts = {}) {
   try {
     const r = await fetch('/api/chat', {
       method: 'POST', headers: { 'content-type': 'application/json' }, signal: ctrl.signal,
-      body: JSON.stringify({ sessionId: S.sessionId, text: fullText, mode: curMode, model: $('modelSel').value, symbol: S.symbol, interval: S.interval, limit: S.limit,
+      body: JSON.stringify({ sessionId: S.sessionId, text: fullText, mode: curTask, model: $('modelSel').value, symbol: S.symbol, interval: S.interval, limit: S.limit,
         activeScript: active ? { name: active.name, code: active.code } : null,
         images: atts.filter(a => a.kind === 'image').map(a => ({ label: a.chart ? `snapshot of the user's chart ${S.symbol} ${S.interval}` : a.label, dataUrl: a.dataUrl })),
         chartState: { scripts: S.scripts.map(s => ({ name: s.name, visible: s.visible })), drawings: drawings.slice(0, 60) } }),
@@ -951,11 +951,11 @@ $('stopBtn').onclick = () => S.abort && S.abort.abort();
 $('newChatBtn').onclick = async () => {
   await api('/api/reset', { sessionId: S.sessionId });
   S.sessionId = 'sess-' + Math.random().toString(36).slice(2); store.set('ql.session', S.sessionId);
-  msgs.innerHTML = ''; setEmpty(true); $('suggest').classList.remove('closed');
+  msgs.innerHTML = ''; setEmpty(true); examplesOpen = true; renderTasks();
 };
-renderMode(); autoGrow();
+renderTasks(); autoGrow();
 window.QLChat = {
-  prefill(text, mode) { setChatCollapsed(false, { focus: false }); if (mode && MODES[mode]) { curMode = mode; store.set('ql.mode', curMode); renderMode(); } const p = $('prompt'); p.value = text; autoGrow(); p.focus(); p.setSelectionRange(p.value.length, p.value.length); },
+  prefill(text, mode) { setChatCollapsed(false, { focus: false }); const tk = LEGACY_TASK[mode] || mode; if (tk && TASKS[tk]) { curTask = tk; store.set('ql.task', curTask); renderTasks(); } const p = $('prompt'); p.value = text; autoGrow(); p.focus(); p.setSelectionRange(p.value.length, p.value.length); },
 };
 
 async function loadSymbols() {

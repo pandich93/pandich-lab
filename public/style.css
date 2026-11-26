@@ -137,6 +137,8 @@ table.trades th{color:var(--muted);font-weight:500}
 .chat.empty .hero{display:flex}
 .hero-logo{font-size:40px;font-weight:800;line-height:1}
 .hero h1{font-size:25px;font-weight:500;margin:10px 0 0;text-align:center}
+.hero-sub{margin:8px 6px 0;color:var(--muted);font-size:13px;line-height:1.5;text-align:center;max-width:340px}
+.hero-panda{color:var(--text)}
 .composer{position:relative;background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:8px 8px 6px}
 .composer:focus-within{border-color:#3a3d44}
 .prompt-row{position:relative}
@@ -157,20 +159,7 @@ table.trades th{color:var(--muted);font-weight:500}
 .popmenu button:hover,.popmenu button.on{background:#2a2e39}
 .pi{display:inline-flex;align-items:center;color:#b2b5be}
 #plusMenu{left:4px;top:100%;margin-top:6px}
-.mode-row{position:relative;display:flex;justify-content:center}
-.mode-pill{display:flex;align-items:stretch;border:1px solid var(--line);border-radius:12px;background:var(--panel2);overflow:hidden}
-.mode-main{display:flex;align-items:center;gap:8px;background:none;border:none;color:var(--text);padding:8px 14px;cursor:pointer}
-.mode-main:hover,.mode-caret:hover{background:#26272c}
-.mode-caret{background:none;border:none;border-left:1px solid var(--line);color:var(--text);padding:0 12px;cursor:pointer;font-size:14px}
 #modeMenu{top:100%;right:calc(50% - 150px);margin-top:6px;width:220px}
-.suggest{border:1px solid var(--line);border-radius:12px;padding:8px 12px;background:var(--panel2)}
-.suggest.closed{display:none}
-.chat:not(.empty) .suggest{display:none}
-.suggest-head{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px;margin-bottom:4px}
-.sugg{display:flex;align-items:flex-start;gap:8px;width:100%;text-align:left;background:none;border:none;padding:7px 4px;cursor:pointer;color:var(--text);border-radius:8px;line-height:1.4}
-.sugg:hover{background:#26272c}
-.sugg.special{background:#26272c}
-.sugg.more{color:var(--muted);font-size:12px;align-items:center}
 .matt{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
 .mthumb{max-width:150px;max-height:90px;border-radius:6px;border:1px solid var(--line)}
 .mfile{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--muted)}
@@ -550,3 +539,18 @@ body.embed .legend{max-width:85%}
 .dset-btn{background:#26282e;border:1px solid #363940;color:#d1d4dc;border-radius:7px;padding:5px 11px;cursor:pointer;font:inherit;font-size:12.5px}
 .dset-btn:hover{background:#2e3138}.dset-btn.pri{background:#2962ff;border-color:#2962ff;color:#fff}.dset-btn.pri:hover{background:#3d73ff}
 .dset-note{font-size:11.5px}
+
+/* ───── Panda start screen: task chips + examples ───── */
+.tasks{display:flex;flex-wrap:wrap;justify-content:center;gap:6px}
+.chat:not(.empty) .tasks,.chat:not(.empty) .examples{display:none}
+.task{display:inline-flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:16px;padding:5px 11px;font-size:12.5px;cursor:pointer}
+.task .pi svg{width:14px;height:14px}
+.task:hover{color:var(--text);border-color:#3a3d44}
+.task.on{color:var(--text);border-color:#4a5bd8;background:rgba(41,98,255,.12)}
+.examples{display:flex;flex-direction:column;gap:2px;margin-top:2px}
+.examples.closed{display:none}
+.ex-h{display:flex;align-items:center;color:var(--muted);font-size:11.5px;padding:4px 6px 2px}
+.ex-more{margin-left:auto;display:inline-flex;align-items:center;gap:4px;background:none;border:none;color:var(--muted);font-size:11.5px;cursor:pointer;padding:2px 4px;border-radius:6px}
+.ex-more:hover{color:var(--text);background:#26272c}
+.ex{text-align:left;background:none;border:none;border-left:2px solid var(--line);color:var(--text);padding:6px 10px;font-size:13px;line-height:1.4;cursor:pointer;border-radius:0 8px 8px 0}
+.ex:hover{background:#26272c;border-left-color:#4a5bd8}

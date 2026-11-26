@@ -328,7 +328,7 @@ function askQuant() {
   let snippet = code(), what = 'этот Pine Script';
   if (E.editor) { const sel = E.editor.getSelection(); const t = sel && E.editor.getModel().getValueInRange(sel); if (t && t.trim()) { snippet = t; what = `этот фрагмент (строки ${sel.startLineNumber}–${sel.endLineNumber}) скрипта «${E.name}»`; } }
   if (E.linked) A.selectScript(E.linked);
-  window.QLChat && window.QLChat.prefill(`Посмотри ${what}: \n\`\`\`pine\n${snippet}\n\`\`\`\n`, 'fix');
+  window.QLChat && window.QLChat.prefill(`Посмотри ${what}: \n\`\`\`pine\n${snippet}\n\`\`\`\n`, 'code');
 }
 
 // Logs + strategy tester

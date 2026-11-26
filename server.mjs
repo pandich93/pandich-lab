@@ -956,9 +956,17 @@ async function agentTurnClaudeCode(body, emit) {
     ctxLines.push(`[Selected script "${body.activeScript.name}" is in work/current.pine — edit it if the request refers to it]`);
   }
   st.clientState = body.chartState && typeof body.chartState === 'object' ? body.chartState : null;
-  const MODES = { chart: 'chart analysis (run `node ql.mjs context` first; look at the attached chart image if any)', indicator: 'build an indicator',
-    strategy: 'build and backtest a strategy() — report the stats', fix: 'fix / convert / explain the given Pine code', screenshot: 'rebuild what is shown on the attached screenshot as Pine',
-    brainstorm: 'brainstorm trading-tool ideas for this market (data-driven, concise list), then build one if asked' };
+  const MODES = {
+    look: 'chart analysis (run `node ql.mjs context` first; look at the attached chart image if any)',
+    build: 'build an indicator',
+    test: 'build and backtest a strategy() — report the stats and say honestly whether the result looks robust or curve-fitted (sample size, costs, parameter sensitivity)',
+    alert: 'build an alert: alert()/alertcondition() on bar close; then tell the user to turn it on in the Watch panel (bell icon) to get Telegram/browser notifications',
+    code: 'fix / convert / explain the given Pine code',
+    pic: 'rebuild what is shown on the attached image as Pine',
+    ideas: 'suggest trading-tool ideas for this market (data-driven, concise list), then build one if asked',
+  };
+  const LEGACY = { chart: 'look', indicator: 'build', strategy: 'test', fix: 'code', screenshot: 'pic', brainstorm: 'ideas' };
+  if (LEGACY[body.mode]) body.mode = LEGACY[body.mode];
   if (MODES[body.mode]) ctxLines.push(`[Mode: ${MODES[body.mode]}]`);
   const imgs = saveImages(body.images);
   if (imgs.length) ctxLines.push(`[Attached images — open each with the Read tool before answering: ${imgs.join(', ')}]`);

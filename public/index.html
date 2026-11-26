@@ -32,8 +32,9 @@
     <div class="chat-body" id="chatBody"><div id="messages"></div></div>
     <div class="composer-wrap" id="composerWrap">
       <div class="hero" id="hero">
-        <div class="hero-logo"><svg viewBox="0 0 20 20" width="44" height="44"><path d="M5 17V3h6a4.5 4.5 0 010 9H8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-        <h1>Начнём, когда будете готовы</h1>
+        <div class="hero-logo"><svg class="panda-ic hero-panda" viewBox="0 0 24 24" width="46" height="46" aria-hidden="true"><circle cx="5.6" cy="6" r="3" fill="currentColor"/><circle cx="18.4" cy="6" r="3" fill="currentColor"/><circle cx="12" cy="13" r="8.4" fill="var(--panel)" stroke="currentColor" stroke-width="1.6"/><ellipse cx="8.7" cy="12.3" rx="1.9" ry="2.6" transform="rotate(-28 8.7 12.3)" fill="currentColor"/><ellipse cx="15.3" cy="12.3" rx="1.9" ry="2.6" transform="rotate(28 15.3 12.3)" fill="currentColor"/><ellipse cx="12" cy="16.4" rx="1.4" ry="1" fill="currentColor"/></svg></div>
+        <h1>Привет, я Panda</h1>
+        <p class="hero-sub">Расскажите идею обычными словами — я напишу Pine-скрипт, запущу его на этом графике и покажу результат.</p>
       </div>
       <div id="editChip" class="edit-chip hidden"></div>
       <div class="composer" id="composer">
@@ -56,15 +57,9 @@
           <button data-act="pine"><span class="pi" data-icon="code"></span>Файл Pine Script (.pine, .txt)…</button>
         </div>
       </div>
-      <div class="mode-row" id="modeRow">
-        <div class="mode-pill">
-          <button class="mode-main" id="modeMain"><span class="pi" id="modeIcon"></span><span class="muted">Попробуйте:</span> <b id="modeName"></b></button>
-          <button class="mode-caret" id="modeCaret" title="Режимы">⌄</button>
-        </div>
-        <div id="modeMenu" class="popmenu hidden"></div>
-      </div>
-      <div class="suggest" id="suggest"></div>
-      <div class="disclaimer">Panda может ошибаться. Проверяйте важные результаты, прежде чем торговать.</div>
+      <div class="tasks" id="tasks"></div>
+      <div class="examples" id="examples"></div>
+      <div class="disclaimer">Panda — помощник, а не советник: это не инвестиционная рекомендация. Проверяйте результат, прежде чем торговать.</div>
     </div>
     <input type="file" id="fileImg" accept="image/*" multiple hidden>
     <input type="file" id="filePine" accept=".pine,.txt,.pinescript" hidden>
