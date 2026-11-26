@@ -1,11 +1,17 @@
 # Builds the Pandich Lab desktop app for Windows (.exe installer) and macOS (.dmg, universal).
 # Push a tag like v0.2.0 → installers are attached to a GitHub Release (auto-update reads them).
-# Run manually (Actions → Desktop build → Run workflow) → installers only as downloadable artifacts.
+# Run manually (Actions → Desktop build → Run workflow): installers as downloadable artifacts;
+# tick "Publish a GitHub Release" to also create release v<version> from desktop/package.json.
 name: Desktop build
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      release:
+        description: 'Publish a GitHub Release (v<version> from desktop/package.json)'
+        type: boolean
+        default: false
 permissions:
   contents: write
 jobs:
@@ -30,9 +36,10 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DO_RELEASE: ${{ inputs.release }}
         run: |
           TARGET=$([ "$RUNNER_OS" = "Windows" ] && echo "--win --x64" || echo "--mac")
-          PUBLISH=$([[ "$GITHUB_REF" == refs/tags/* ]] && echo "always" || echo "never")
+          PUBLISH=$([[ "$GITHUB_REF" == refs/tags/* || "$DO_RELEASE" == "true" ]] && echo "always" || echo "never")
           npx electron-builder $TARGET --publish $PUBLISH
       - uses: actions/upload-artifact@v4
         with:
