@@ -30,7 +30,6 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: |
           TARGET=$([ "$RUNNER_OS" = "Windows" ] && echo "--win --x64" || echo "--mac")
           PUBLISH=$([[ "$GITHUB_REF" == refs/tags/* ]] && echo "always" || echo "never")

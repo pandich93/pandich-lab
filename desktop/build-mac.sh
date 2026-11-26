@@ -8,5 +8,5 @@ done
 (cd .. && npm install --omit=dev --no-fund --no-audit)
 [ -f ../node_modules/pinets/package.json ] || { echo '[!] server dependencies missing (pinets)'; exit 1; }
 npm install --no-fund --no-audit
-CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac --publish never
+npx electron-builder --mac --publish never
 open dist

@@ -97,7 +97,9 @@
       ],
       "category": "public.app-category.finance",
       "icon": "build/icon.png",
-      "notarize": false
+      "notarize": false,
+      "identity": "-",
+      "hardenedRuntime": false
     },
     "dmg": {
       "title": "Pandich Lab ${version}"
