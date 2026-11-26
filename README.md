@@ -189,6 +189,12 @@ Panda работает через твой собственный Claude:
 - `data/`: сигналы Watch, настройки Telegram, шаблоны, макеты;
 - `scripts/`: сохранённые скрипты.
 
+### Если что-то не подключается
+
+Нажмите **⚙ Настройки** в правом верхнем углу. Там видно состояние Claude Code (Panda), MetaTrader 5, Binance, интернета и Telegram. Для каждой проблемы написано, что сделать, и есть кнопки: «Проверить Panda», «Войти в Claude», «Установить Claude Code», «Переподключить MT5», «Установить модуль». Точка на кнопке настроек показывает общее состояние: зелёная — всё в порядке, жёлтая — предупреждение, красная — проблема.
+
+Не получается — нажмите **«Скопировать диагностику»** и пришлите текст в [Issues](https://github.com/pandich93/pandich-lab/issues). Путь к домашней папке, имя пользователя, токены и номер счёта в отчёте скрываются.
+
 ### Безопасность
 
 - Сервер слушает только `127.0.0.1`. **Не открывай его в сеть и не выставляй в интернет:** в нём нет авторизации.
@@ -275,6 +281,12 @@ Copy `config.example.json` to `config.json`.
 
 Your data stays in `data/` and `scripts/`, both git-ignored.
 
+### Troubleshooting connections
+
+Click **⚙ Настройки** (Settings) in the top-right corner. It shows the status of Claude Code (Panda), MetaTrader 5, Binance, the internet and Telegram. Each problem comes with a plain-language fix and one-click actions: test Panda, sign in to Claude, install Claude Code, reconnect MT5, install the Python module. The dot on the Settings button shows the overall state: green means all good, yellow a warning, red a problem.
+
+Still stuck? Click **«Скопировать диагностику»** (copy diagnostics) and paste the report into an [Issue](https://github.com/pandich93/pandich-lab/issues). The home path, user name, tokens and account number are masked in the report.
+
 ### Security
 
 - The server binds to `127.0.0.1` and has no authentication. **Never expose it to a network.**
@@ -318,6 +330,10 @@ Yoki AI-agentingiz bo'lsa, [yuqoridagi promptni](#-install-with-an-ai-agent) ung
 ### AI qanday ishlaydi
 
 Panda sizning o'z **Claude** obunangiz (Pro/Max) orqali, kompyuteringizdagi Claude Code yordamida ishlaydi. Grafik va indikatorlar obunasiz ham ishlaydi. Dastur interfeysi hozircha rus tilida.
+
+### Ulanish bilan muammo bo'lsa
+
+O'ng yuqoridagi **⚙ Настройки** tugmasini bosing: Claude Code (Panda), MetaTrader 5, Binance, internet va Telegram holati ko'rinadi. Har bir muammo uchun nima qilish kerakligi yozilgan va tuzatish tugmalari bor. Hal bo'lmasa, **«Скопировать диагностику»** tugmasini bosib, matnni dasturchiga yuboring.
 
 ### Ogohlantirish
 

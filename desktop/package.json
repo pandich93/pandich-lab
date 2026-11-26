@@ -1,7 +1,7 @@
 {
   "name": "pandich-lab-desktop",
   "productName": "Pandich Lab",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Pandich Lab desktop app: chart + Panda AI workbench for Pine Script v6",
   "main": "main.js",
   "author": "pandich",
@@ -31,6 +31,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "app-preload.js",
       "setup.html",
       "setup.js",
       "build/icon.png",

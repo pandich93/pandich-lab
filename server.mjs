@@ -5,7 +5,22 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+import os from 'node:os';
 import { PineTS, Indicator, BaseProvider } from 'pinets';
+
+// ── recent server log lines (Settings → «Скопировать диагностику»)
+const LOGBUF = [];
+for (const lvl of ['log', 'warn', 'error']) {
+  const orig = console[lvl].bind(console);
+  console[lvl] = (...a) => {
+    orig(...a);
+    try {
+      const s = a.map(x => x instanceof Error ? (x.stack || x.message) : typeof x === 'string' ? x : JSON.stringify(x)).join(' ');
+      LOGBUF.push(`${new Date().toISOString().slice(11, 19)} ${lvl === 'log' ? '' : lvl.toUpperCase() + ' '}${s}`.slice(0, 2000));
+      if (LOGBUF.length > 400) LOGBUF.splice(0, LOGBUF.length - 400);
+    } catch { /* never break logging */ }
+  };
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Writable home for user data. Dev/zip install: the app folder itself. Desktop app: QL_HOME (the app bundle is read-only).
@@ -1133,6 +1148,284 @@ function readBody(req) {
     req.on('end', () => { try { resolve(s ? JSON.parse(s) : {}); } catch (e) { reject(e); } });
   });
 }
+// ───────────────────────── HEALTH / SETTINGS (connection status for regular users) ─────────────────────────
+// Every check returns plain-language text + what to do; the UI (public/settings.js) only renders it.
+const AG = { lastOk: 0, lastErr: '', lastErrAt: 0 };      // last real Panda turn
+const HC = { ver: null, verAt: 0, net: null, netAt: 0, test: null };
+const HOMEDIR = os.homedir();
+const OS_USER = (() => { try { return os.userInfo().username; } catch { return ''; } })();
+const reEsc = x => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function maskPII(x) {
+  let t = String(x);
+  if (HOMEDIR) { t = t.split(HOMEDIR).join('~'); t = t.split(HOMEDIR.replace(/\\/g, '/')).join('~'); }
+  if (OS_USER && OS_USER.length >= 3) t = t.replace(new RegExp(`([\\\\/])${reEsc(OS_USER)}(?=[\\\\/]|$)`, 'gi'), '$1<user>');
+  return t
+    .replace(/\b\d{6,12}:[A-Za-z0-9_-]{30,}\b/g, '<tg-token>')
+    .replace(/sk-ant-[A-Za-z0-9_-]+/g, 'sk-ant-<key>')
+    .replace(/#(\d{2,})(\d{3})\b/g, (_m, _a, b) => `#…${b}`);
+}
+const ago = t => { const s = Math.max(0, Math.round((Date.now() - t) / 1000)); return s < 60 ? `${s} с назад` : s < 3600 ? `${Math.round(s / 60)} мин назад` : s < 86400 ? `${Math.round(s / 3600)} ч назад` : `${Math.round(s / 86400)} дн назад`; };
+const IS_WIN = process.platform === 'win32', IS_MAC = process.platform === 'darwin';
+const CLAUDE_INSTALL = IS_WIN
+  ? [{ label: 'PowerShell', text: 'irm https://claude.ai/install.ps1 | iex' }]
+  : [{ label: 'Терминал', text: 'curl -fsSL https://claude.ai/install.sh | bash' }];
+
+// Run the Claude Code CLI the same way the chat does (Windows: through cmd.exe because of the .cmd shim)
+function runClaudeCli(args, { timeout = 30000, cwd } = {}) {
+  return new Promise(resolve => {
+    const env = { ...process.env }; delete env.ANTHROPIC_API_KEY;
+    const cmd = IS_WIN ? (process.env.ComSpec || 'cmd.exe') : CFG.claudeBin;
+    const cmdArgs = IS_WIN ? ['/d', '/s', '/c', `"${[quoteArg(CFG.claudeBin), ...args.map(quoteArg)].join(' ')}"`] : args;
+    let out = '', err = '', done = false, child = null, timer = null;
+    const fin = r => { if (!done) { done = true; clearTimeout(timer); resolve(r); } };
+    try { child = spawn(cmd, cmdArgs, { cwd: cwd || HOME, env, windowsHide: true, windowsVerbatimArguments: IS_WIN }); }
+    catch (e) { return resolve({ code: -1, out: '', err: e.message }); }
+    timer = setTimeout(() => { try { child.kill(); } catch { /* gone */ } fin({ code: -2, out, err: err + '\ntimeout', timeout: true }); }, timeout);
+    child.stdout.on('data', c => { out += c; });
+    child.stderr.on('data', c => { err += c; });
+    child.on('error', e => fin({ code: -1, out, err: e.message }));
+    child.on('close', code => fin({ code, out, err }));
+    child.stdin.on('error', () => { /* closed early */ });
+    child.stdin.end();
+  });
+}
+const notFoundRe = /ENOENT|not recognized|не является внутренней|command not found|No such file|cannot find|9009/i;
+// Turn any Claude Code error text into "what happened + what to do"
+function classifyClaudeErr(text) {
+  const t = String(text || '');
+  if (notFoundRe.test(t) || /Не удалось запустить/.test(t)) return { code: 'missing', summary: 'Claude Code не найден', hint: 'Panda работает через программу Claude Code. Установите её и войдите в свой аккаунт Claude (нужна платная подписка Pro или Max).' };
+  if (/log ?in|authenticat|credential|oauth|invalid api key|401|unauthori[sz]ed|not logged|token (has )?expired/i.test(t)) return { code: 'login', summary: 'Не выполнен вход в Claude', hint: 'Нажмите «Войти в Claude»: откроется окно Claude Code. Выберите вход через подписку Claude, подтвердите в браузере, закройте окно и нажмите «Проверить Panda».' };
+  if (/rate.?limit|usage limit|limit reached|quota|429|overloaded|529/i.test(t)) return { code: 'limit', summary: 'Лимит подписки исчерпан или сервис перегружен', hint: 'Подождите, пока лимит обновится (обычно несколько часов), или переключите модель на haiku в чате.' };
+  if (/ENOTFOUND|ECONNREFUSED|ETIMEDOUT|ECONNRESET|EAI_AGAIN|fetch failed|network|socket|certificate|proxy|getaddrinfo/i.test(t)) return { code: 'network', summary: 'Нет связи с серверами Claude', hint: 'Проверьте интернет. Если сеть рабочая, мешает фаервол, прокси или провайдер: попробуйте другую сеть или VPN.' };
+  if (/timeout|таймаут/i.test(t)) return { code: 'timeout', summary: 'Claude Code не ответил вовремя', hint: 'Повторите проверку. Если повторяется — перезапустите приложение и проверьте интернет.' };
+  return { code: 'error', summary: 'Ошибка Claude Code', hint: 'Скопируйте диагностику и отправьте разработчику.' };
+}
+// Installed but not on PATH yet (fresh install, app started from Explorer/Finder) → look in the standard places
+function claudeCandidates() {
+  const h = HOMEDIR, c = [];
+  if (IS_WIN) c.push(path.join(h, '.local', 'bin', 'claude.exe'), path.join(process.env.APPDATA || path.join(h, 'AppData', 'Roaming'), 'npm', 'claude.cmd'));
+  else c.push(path.join(h, '.local', 'bin', 'claude'), path.join(h, '.claude', 'local', 'claude'), '/opt/homebrew/bin/claude', '/usr/local/bin/claude', path.join(h, '.npm-global', 'bin', 'claude'));
+  return c.filter(f => { try { return fs.statSync(f).isFile(); } catch { return false; } });
+}
+async function claudeVersion(force) {
+  if (!force && HC.ver && Date.now() - HC.verAt < (HC.ver.ok ? 300000 : 20000)) return HC.ver;
+  let r = await runClaudeCli(['--version'], { timeout: 25000 });
+  if (r.code !== 0) {
+    for (const f of claudeCandidates()) {
+      if (f === CFG.claudeBin) continue;
+      const prev = CFG.claudeBin; CFG.claudeBin = f;
+      const r2 = await runClaudeCli(['--version'], { timeout: 25000 });
+      if (r2.code === 0) { console.log(`Claude Code found at ${f}`); r = r2; break; }
+      CFG.claudeBin = prev;
+    }
+  }
+  const txt = String(r.out || '').trim();
+  HC.ver = r.code === 0 && /\d+\.\d+/.test(txt) ? { ok: true, version: txt.split(/\r?\n/)[0] } : { ok: false, raw: (r.err || txt || `exit ${r.code}`).trim().slice(0, 400) };
+  HC.verAt = Date.now();
+  return HC.ver;
+}
+// Deep check: one tiny real request through the subscription (proves install + login + network)
+async function claudeTest() {
+  const t0 = Date.now();
+  const r = await runClaudeCli(['-p', 'Reply with the single word OK', '--output-format', 'json', '--model', 'haiku'], { timeout: 120000, cwd: path.join(HOME, 'agent', 'work') });
+  let j = null; try { j = JSON.parse(String(r.out).trim().split(/\r?\n/).pop()); } catch { /* not json */ }
+  const ok = !!j && j.is_error === false && r.code === 0;
+  const raw = ok ? '' : String((j && (j.result || j.subtype)) || r.err || r.out || `exit ${r.code}`).trim().slice(0, 600);
+  HC.test = { t: Date.now(), ok, ms: Date.now() - t0, raw, ...(ok ? {} : classifyClaudeErr(raw)) };
+  if (ok) { AG.lastOk = Date.now(); HC.ver = null; } else console.log(`claude test failed: ${raw}`);
+  return HC.test;
+}
+async function probe(url, ms = 7000) {
+  const t0 = Date.now();
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(ms) });
+    try { await r.body?.cancel(); } catch { /* ignore */ }
+    return { ok: true, status: r.status, ms: Date.now() - t0 };
+  } catch (e) {
+    return { ok: false, error: e.cause?.code || (e.name === 'TimeoutError' ? 'timeout' : e.message), ms: Date.now() - t0 };
+  }
+}
+async function netProbes(force) {
+  if (!force && HC.net && Date.now() - HC.netAt < 30000) return HC.net;
+  const [anthropic, bnMirror, bnMain, telegram] = await Promise.all([
+    probe('https://api.anthropic.com/'),
+    probe('https://data-api.binance.vision/api/v3/ping'),
+    probe('https://api.binance.com/api/v3/ping'),
+    tg().token ? probe('https://api.telegram.org/') : Promise.resolve(null),
+  ]);
+  HC.net = { anthropic, bnMirror, bnMain, telegram }; HC.netAt = Date.now();
+  return HC.net;
+}
+function mt5Item() {
+  const it = { id: 'mt5', title: 'MetaTrader 5', details: [], actions: [], cmds: [] };
+  if (CFG.mock) return Object.assign(it, { state: 'off', summary: 'Отключён (тестовые данные MOCK)' });
+  if (!IS_WIN) return Object.assign(it, { state: 'off', summary: 'Только для Windows', hint: `Терминал MT5 подключается только на Windows. На ${IS_MAC ? 'Mac' : 'этой системе'} графики идут с Binance (крипта) — всё остальное работает.` });
+  if (!CFG.mt5Enabled) return Object.assign(it, { state: 'off', summary: 'Выключен в config.json (mt5Enabled: false)' });
+  if (MT5.ready) {
+    const i = MT5.info || {};
+    it.details.push(['Брокер / сервер', [i.company, i.server].filter(Boolean).join(' · ') || '—']);
+    if (i.login) it.details.push(['Счёт', '…' + String(i.login).slice(-3)]);
+    it.details.push(['Символов', String(MT5.symbols.size)]);
+    it.details.push(['Время сервера', `UTC${MT5.offset >= 0 ? '+' : ''}${MT5.offset / 3600}${MT5.offsetKnown ? '' : ' (не определено — рынок закрыт?)'}`]);
+    it.actions.push('mt5.reconnect');
+    return Object.assign(it, { state: 'ok', summary: 'Подключён' });
+  }
+  it.actions.push('mt5.reconnect');
+  const e = String(MT5.error || '');
+  if (MT5.starting) return Object.assign(it, { state: 'idle', summary: 'Подключаюсь…' });
+  if (!e) return Object.assign(it, { state: 'idle', summary: 'Ещё не подключался', hint: 'Откройте терминал MetaTrader 5, войдите в счёт и нажмите «Переподключить».' });
+  it.details.push(['Ошибка', maskPII(e).slice(0, 300)]);
+  if (/import MetaTrader5 failed|No module named/i.test(e)) {
+    it.actions.unshift('mt5.install');
+    it.cmds = [{ label: 'Командная строка', text: 'py -3 -m pip install MetaTrader5' }];
+    return Object.assign(it, { state: 'warn', summary: 'Не установлен модуль MetaTrader5 для Python', hint: 'Установите модуль командой ниже (или кнопкой «Установить модуль»), затем нажмите «Переподключить».' });
+  }
+  if (/python not found|ENOENT|was not found|Microsoft Store|9009|not recognized/i.test(e)) {
+    it.cmds = [{ label: 'После установки Python', text: 'py -3 -m pip install MetaTrader5' }];
+    it.link = { label: 'Скачать Python', url: 'https://www.python.org/downloads/windows/' };
+    return Object.assign(it, { state: 'warn', summary: 'Не найден Python 3', hint: 'Для MT5 нужен Python 3. При установке отметьте галочку «Add python.exe to PATH», затем установите модуль MetaTrader5 и нажмите «Переподключить». Без MT5 работают графики Binance.' });
+  }
+  if (/initialize failed|IPC|terminal|Authorization/i.test(e)) return Object.assign(it, { state: 'warn', summary: 'Терминал MT5 не отвечает', hint: 'Запустите MetaTrader 5 и войдите в торговый счёт (внизу справа должен быть пинг, а не «Нет соединения»). Затем нажмите «Переподключить». Если терминалов несколько — укажите путь к нужному в config.json (mt5Path).' });
+  return Object.assign(it, { state: 'warn', summary: 'MT5 недоступен', hint: 'Проверьте, что терминал запущен и залогинен, затем нажмите «Переподключить».' });
+}
+async function health({ force = false } = {}) {
+  const [cv, net] = await Promise.all([CFG.backend === 'api' ? null : claudeVersion(force), netProbes(force)]);
+  const items = [];
+
+  // Claude / Panda
+  const cl = { id: 'claude', title: 'Claude Code (Panda)', details: [], actions: [], cmds: [] };
+  if (CFG.backend === 'api') {
+    Object.assign(cl, CFG.apiKey ? { state: 'ok', summary: 'Через API-ключ (оплата за токены)' } : { state: 'err', summary: 'API-ключ не задан', hint: 'Укажите anthropicApiKey в config.json или переключите backend на claude-code.' });
+  } else if (!cv.ok) {
+    const c = classifyClaudeErr(cv.raw);
+    Object.assign(cl, { state: 'err', summary: c.code === 'missing' ? c.summary : 'Claude Code не запускается', hint: c.hint });
+    cl.details.push(['Путь', maskPII(CFG.claudeBin)], ['Ответ', maskPII(cv.raw).slice(0, 300)]);
+    cl.cmds = CLAUDE_INSTALL; cl.link = { label: 'Инструкция Claude Code', url: 'https://docs.claude.com/en/docs/claude-code/overview' };
+    cl.actions.push('claude.install');
+  } else {
+    cl.details.push(['Версия', cv.version], ['Путь', maskPII(CFG.claudeBin)]);
+    const test = HC.test, lastErrNewer = AG.lastErr && AG.lastErrAt > AG.lastOk;
+    if (test && !test.ok && test.t >= AG.lastOk) Object.assign(cl, { state: 'err', summary: test.summary, hint: test.hint }), cl.details.push(['Ответ', maskPII(test.raw).slice(0, 300)]);
+    else if (lastErrNewer) { const c = classifyClaudeErr(AG.lastErr); Object.assign(cl, { state: 'err', summary: c.summary, hint: c.hint }); cl.details.push(['Последняя ошибка', `${maskPII(AG.lastErr).slice(0, 300)} (${ago(AG.lastErrAt)})`]); }
+    else if (AG.lastOk) Object.assign(cl, { state: 'ok', summary: `Работает · последний ответ ${ago(AG.lastOk)}` });
+    else Object.assign(cl, { state: 'idle', summary: 'Установлен, вход не проверен', hint: 'Нажмите «Проверить Panda» — будет отправлен один короткий запрос через вашу подписку.' });
+    if (test) cl.details.push(['Проверка', `${test.ok ? 'успешно' : 'ошибка'} · ${ago(test.t)}${test.ok ? ` · ${(test.ms / 1000).toFixed(1)} с` : ''}`]);
+    cl.actions.push('claude.test', 'claude.login');
+  }
+  if (CFG.backend !== 'api' && !net.anthropic.ok && cl.state !== 'err') Object.assign(cl, { state: 'warn', summary: cl.summary + ' · нет связи с Anthropic', hint: 'Серверы Claude не отвечают: проверьте интернет, фаервол или VPN.' });
+  items.push(cl);
+
+  items.push(mt5Item());
+
+  // Binance
+  const bn = { id: 'binance', title: 'Binance (крипта)', details: [], actions: [], cmds: [] };
+  const fmtP = p => p.ok ? `${p.status === 200 ? 'доступен' : 'HTTP ' + p.status} · ${p.ms} мс` : `нет связи (${p.error})`;
+  bn.details.push(['data-api.binance.vision', fmtP(net.bnMirror)], ['api.binance.com', fmtP(net.bnMain)]);
+  const okP = p => p.ok && p.status === 200;
+  if (okP(net.bnMirror) || okP(net.bnMain)) Object.assign(bn, { state: 'ok', summary: `Доступен · ${Math.min(...[net.bnMirror, net.bnMain].filter(okP).map(p => p.ms))} мс` });
+  else if ([net.bnMirror, net.bnMain].some(p => p.ok && (p.status === 451 || p.status === 403))) Object.assign(bn, { state: 'err', summary: 'Binance блокирует ваш регион', hint: 'Котировки крипты недоступны из вашей страны/сети. Нужен VPN или другая сеть.' });
+  else Object.assign(bn, { state: 'err', summary: 'Нет связи с Binance', hint: 'Проверьте интернет. Если интернет есть — сайт может блокировать провайдер или фаервол; попробуйте VPN.' });
+  items.push(bn);
+
+  // Internet → Anthropic (shown separately: explains Panda problems)
+  const nt = { id: 'net', title: 'Интернет', details: [], actions: [], cmds: [] };
+  nt.details.push(['api.anthropic.com (Panda)', net.anthropic.ok ? `доступен · ${net.anthropic.ms} мс` : `нет связи (${net.anthropic.error})`]);
+  if (net.telegram) nt.details.push(['api.telegram.org', net.telegram.ok ? `доступен · ${net.telegram.ms} мс` : `нет связи (${net.telegram.error})`]);
+  const anyNet = net.anthropic.ok || net.bnMirror.ok || net.bnMain.ok;
+  if (!anyNet) Object.assign(nt, { state: 'err', summary: 'Нет интернета', hint: 'Ни один сервис не отвечает. Проверьте подключение к сети.' });
+  else if (!net.anthropic.ok) Object.assign(nt, { state: 'warn', summary: 'Серверы Claude недоступны', hint: 'Интернет есть, но api.anthropic.com не отвечает — Panda работать не будет. Возможно, мешает провайдер, фаервол или прокси: попробуйте другую сеть или VPN.' });
+  else if (net.anthropic.status === 403) Object.assign(nt, { state: 'warn', summary: 'Anthropic ответил 403', hint: 'Доступ к Claude из вашей сети может быть ограничен. Если Panda не отвечает — попробуйте другую сеть или VPN.' });
+  else if (net.telegram && !net.telegram.ok) Object.assign(nt, { state: 'warn', summary: 'Telegram недоступен', hint: 'Сигналы Watch в Telegram не дойдут: api.telegram.org не отвечает (часто блокируется провайдером).' });
+  else Object.assign(nt, { state: 'ok', summary: 'В порядке' });
+  items.push(nt);
+
+  // Telegram + Watch
+  const t = tg();
+  const tgi = { id: 'telegram', title: 'Telegram (сигналы Watch)', details: [], actions: ['tg.setup'], cmds: [] };
+  if (t.token && t.chatId) { Object.assign(tgi, { state: 'ok', summary: `Бот @${t.bot || '?'} → ${t.chatTitle || 'чат ' + t.chatId}` }); tgi.actions.push('tg.test'); }
+  else if (t.token) Object.assign(tgi, { state: 'warn', summary: `Бот @${t.bot || '?'} подключён, чат не выбран`, hint: 'Напишите боту любое сообщение в Telegram и нажмите «Найти чат» в панели Watch.' });
+  else Object.assign(tgi, { state: 'off', summary: 'Не настроен (необязательно)', hint: 'Нужен только чтобы получать сигналы Watch на телефон.' });
+  const on = W.list.filter(w => w.enabled !== false).length;
+  tgi.details.push(['Watch', W.list.length ? `${on} из ${W.list.length} активны` : 'нет наблюдений']);
+  items.push(tgi);
+
+  const rank = { err: 3, warn: 2, ok: 1, idle: 0, off: 0 };
+  const worst = items.filter(i => i.id !== 'telegram').reduce((a, i) => rank[i.state] > rank[a] ? i.state : a, 'ok');
+  return {
+    t: Date.now(), overall: worst, items,
+    app: { ui: uiVersion(), started: STARTED_AT, port: CFG.port, desktop: DESKTOP, platform: process.platform, arch: process.arch, node: process.versions.node, electron: process.versions.electron || null, backend: CFG.backend, mock: CFG.mock, home: maskPII(HOME) },
+  };
+}
+function diagnosticsText(h, extra = '') {
+  const tag = { ok: 'OK  ', warn: 'WARN', err: 'ERR ', idle: '··  ', off: 'off ' };
+  const L = [`Pandich Lab — диагностика · ${new Date().toISOString()}`,
+    `ui ${h.app.ui} · ${h.app.desktop ? 'desktop' : 'web'} · ${h.app.platform}/${h.app.arch} · node ${h.app.node}${h.app.electron ? ' · electron ' + h.app.electron : ''} · port ${h.app.port} · backend ${h.app.backend}${h.app.mock ? ' · MOCK' : ''}`,
+    `started ${h.app.started} · home ${h.app.home}`, '', '── Статус ──'];
+  for (const i of h.items) {
+    L.push(`[${tag[i.state] || i.state}] ${i.title}: ${i.summary}`);
+    for (const [k, v] of i.details || []) L.push(`        ${k}: ${v}`);
+  }
+  if (extra) L.push('', extra);
+  L.push('', `── Лог сервера (последние ${Math.min(LOGBUF.length, 200)} строк) ──`, ...LOGBUF.slice(-200));
+  return maskPII(L.join('\n'));
+}
+// Actions that start programs: only from our own page (blocks other websites poking 127.0.0.1)
+function localOrigin(req) {
+  const o = req.headers.origin; if (!o) return true;
+  try { return ['127.0.0.1', 'localhost', '[::1]'].includes(new URL(o).hostname); } catch { return false; }
+}
+function openClaudeLogin() {
+  const env = { ...process.env }; delete env.ANTHROPIC_API_KEY;
+  if (IS_WIN) {
+    const p = spawn(process.env.ComSpec || 'cmd.exe', ['/d', '/c', 'start', '"Claude Code login"', 'cmd', '/k', quoteArg(CFG.claudeBin)], { env, detached: true, stdio: 'ignore', windowsHide: false, windowsVerbatimArguments: true });
+    p.unref(); return { ok: true };
+  }
+  if (IS_MAC) {
+    const bin = CFG.claudeBin.replace(/'/g, `'\\''`).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const p = spawn('osascript', ['-e', `tell application "Terminal" to do script "unset ANTHROPIC_API_KEY; '${bin}'"`, '-e', 'tell application "Terminal" to activate'], { detached: true, stdio: 'ignore' });
+    p.unref(); return { ok: true };
+  }
+  return { ok: false, error: 'Откройте терминал и выполните команду: claude' };
+}
+// One-click installers (same commands as the desktop setup wizard); output tail goes back to the UI
+function runCmd(cmd, args, timeout = 600000) {
+  return new Promise(resolve => {
+    let out = '', p, timer;
+    try { p = spawn(cmd, args, { windowsHide: true, env: process.env }); } catch (e) { return resolve({ code: -1, out: e.message }); }
+    timer = setTimeout(() => { try { p.kill(); } catch { /* gone */ } }, timeout);
+    p.stdout.on('data', c => { out += c; }); p.stderr.on('data', c => { out += c; });
+    p.on('error', e => { clearTimeout(timer); resolve({ code: -1, out: out + e.message }); });
+    p.on('close', code => { clearTimeout(timer); resolve({ code, out }); });
+  });
+}
+async function installClaude() {
+  const r = IS_WIN
+    ? await runCmd('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', 'irm https://claude.ai/install.ps1 | iex'])
+    : await runCmd('/bin/bash', ['-lc', 'curl -fsSL https://claude.ai/install.sh | bash']);
+  console.log(`claude install: exit ${r.code}`);
+  HC.ver = null; const v = await claudeVersion(true);
+  return { ok: v.ok, out: maskPII(r.out).slice(-1500) };
+}
+async function installMT5Module() {
+  let last = { code: -1, out: 'Python 3 не найден' };
+  for (const [bin, args] of pythonCandidates()) {
+    last = await runCmd(bin, [...args, '-m', 'pip', 'install', '--upgrade', 'MetaTrader5'], 300000);
+    if (last.code === 0) break;
+  }
+  console.log(`MetaTrader5 module install: exit ${last.code}`);
+  const ok = last.code === 0;
+  if (ok) await mt5Reconnect();
+  return { ok, out: maskPII(last.out).slice(-1500) };
+}
+async function mt5Reconnect() {
+  if (MT5.starting) { try { await MT5.starting; } catch { /* ignore */ } }
+  try { if (MT5.proc) MT5.proc.kill(); } catch { /* gone */ }
+  MT5.proc = null; MT5.ready = false; MT5.error = null; MT5.lastStartTry = 0;
+  await new Promise(r => setTimeout(r, 300));
+  MT5.lastStartTry = 0;
+  return startMT5();
+}
+
 const STATIC = {
   '/': ['public/index.html', 'text/html; charset=utf-8'],
   '/app.js': ['public/app.js', 'text/javascript; charset=utf-8'],
@@ -1143,6 +1436,7 @@ const STATIC = {
   '/replay.js': ['public/replay.js', 'text/javascript; charset=utf-8'],
   '/watch.js': ['public/watch.js', 'text/javascript; charset=utf-8'],
   '/library.js': ['public/library.js', 'text/javascript; charset=utf-8'],
+  '/settings.js': ['public/settings.js', 'text/javascript; charset=utf-8'],
   '/style.css': ['public/style.css', 'text/css; charset=utf-8'],
   '/vendor/lwc.js': ['node_modules/lightweight-charts/dist/lightweight-charts.standalone.production.js', 'text/javascript; charset=utf-8'],
 };
@@ -1166,6 +1460,21 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/api/config') {
       return sendJSON(res, 200, { backend: CFG.backend, models: CFG.models, defaultModel: CFG.defaultModel, hasKey: !!CFG.apiKey, mock: CFG.mock, intervals: TF_PRESETS, mt5: { ready: MT5.ready, error: MT5.error, server: MT5.info?.server || null } });
+    }
+    if (req.method === 'GET' && url.pathname === '/api/health') return sendJSON(res, 200, await health({ force: url.searchParams.get('force') === '1' }));
+    if (req.method === 'GET' && url.pathname === '/api/diagnostics') {
+      const h = await health({ force: true });
+      res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-cache' });
+      return res.end(diagnosticsText(h));
+    }
+    if (req.method === 'POST' && /^\/api\/(health\/claude-test|claude\/login|claude\/install|mt5\/reconnect|mt5\/install)$/.test(url.pathname)) {
+      if (!localOrigin(req)) return sendJSON(res, 403, { error: 'forbidden origin' });
+      await readBody(req).catch(() => ({}));
+      if (url.pathname === '/api/health/claude-test') { await claudeVersion(true); return sendJSON(res, 200, { test: await claudeTest(), health: await health() }); }
+      if (url.pathname === '/api/claude/login') return sendJSON(res, 200, openClaudeLogin());
+      if (url.pathname === '/api/claude/install') return sendJSON(res, 200, { ...(await installClaude()), health: await health({ force: true }) });
+      if (url.pathname === '/api/mt5/install') return sendJSON(res, 200, { ...(await installMT5Module()), health: await health() });
+      await mt5Reconnect(); return sendJSON(res, 200, { health: await health() });
     }
     if (req.method === 'GET' && url.pathname === '/api/klines') {
       const symbol = (url.searchParams.get('symbol') || 'BTCUSDT').toUpperCase();
@@ -1320,8 +1629,8 @@ const server = http.createServer(async (req, res) => {
       const b = await readBody(req);
       res.writeHead(200, { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-cache' });
       const emit = ev => res.write(JSON.stringify(ev) + '\n');
-      try { await agentTurn(b, emit); emit({ type: 'done' }); }
-      catch (e) { emit({ type: 'error', text: e && e.message ? e.message : String(e) }); }
+      try { await agentTurn(b, emit); AG.lastOk = Date.now(); emit({ type: 'done' }); }
+      catch (e) { const m = e && e.message ? e.message : String(e); AG.lastErr = m; AG.lastErrAt = Date.now(); emit({ type: 'error', text: m, diag: true }); }
       return res.end();
     }
     if (req.method === 'POST' && url.pathname === '/api/admin/restart') {

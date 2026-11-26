@@ -931,7 +931,11 @@ async function send(text, opts = {}) {
         else if (ev.type === 'chart') await setChart(ev.symbol, ev.interval);
         else if (ev.type === 'draw' && window.QLDraw) { for (const it of ev.items) window.QLDraw.add(it.type, it.pts, it.style); }
         else if (ev.type === 'draw-clear' && window.QLDraw) window.QLDraw.removeAgent();
-        else if (ev.type === 'error') msgs.insertBefore(Object.assign(document.createElement('div'), { className: 'msg err', textContent: '⚠ ' + ev.text }), statusEl);
+        else if (ev.type === 'error') {
+          const el = Object.assign(document.createElement('div'), { className: 'msg err', textContent: '⚠ ' + ev.text });
+          if (ev.diag && window.QLSettings) { const b = Object.assign(document.createElement('button'), { className: 'st-chatbtn', textContent: 'Проверить подключение' }); b.onclick = () => window.QLSettings.open(); el.appendChild(b); }
+          msgs.insertBefore(el, statusEl);
+        }
         $('chatBody').scrollTop = $('chatBody').scrollHeight;
       }
     }

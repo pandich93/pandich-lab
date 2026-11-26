@@ -135,7 +135,7 @@ function stopServer() {
 function createMain() {
   S.win = new BrowserWindow({
     width: 1500, height: 920, minWidth: 980, minHeight: 600, show: false, backgroundColor: '#131416', title: 'Pandich Lab', icon: ICON,
-    autoHideMenuBar: true, webPreferences: { contextIsolation: true, sandbox: true, spellcheck: false },
+    autoHideMenuBar: true, webPreferences: { contextIsolation: true, sandbox: true, spellcheck: false, preload: path.join(__dirname, 'app-preload.js') },
   });
   S.win.loadURL(`http://127.0.0.1:${S.port}/`);
   S.win.once('ready-to-show', () => { if (!process.argv.includes('--hidden')) S.win.show(); });
@@ -167,6 +167,11 @@ function openSetup() {
   S.setupWin.loadFile(path.join(__dirname, 'setup.html'));
   S.setupWin.on('closed', () => { S.setupWin = null; if (!settings.setupDone && !S.quitting) { /* closed without finishing: still usable */ settings.setupDone = true; saveSettings(); showMain(); } });
 }
+function openSettings() {
+  if (!S.win || !settings.setupDone) { showMain(); return; }
+  showMain();
+  S.win.webContents.executeJavaScript('window.QLSettings && window.QLSettings.open()').catch(() => { /* page still loading */ });
+}
 function showError(text) {
   const w = S.win || new BrowserWindow({ width: 640, height: 300, backgroundColor: '#131416', icon: ICON, autoHideMenuBar: true });
   w.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(`<body style="font:14px system-ui;background:#131416;color:#d1d4dc;padding:24px"><h3>Pandich Lab</h3><p>${text.replace(/</g, '&lt;')}</p><p style="color:#888">Лог: ${LOG_DIR.replace(/</g, '&lt;')}</p></body>`));
@@ -177,6 +182,7 @@ function showError(text) {
 function trayMenu() {
   return Menu.buildFromTemplate([
     { label: 'Открыть Pandich Lab', click: showMain },
+    { label: 'Настройки и диагностика', click: openSettings },
     { type: 'separator' },
     { label: 'Запускать при входе в систему', type: 'checkbox', checked: settings.autostart, click: m => setAutostart(m.checked) },
     { label: 'Мастер настройки (Claude Code, MT5)', click: openSetup },
@@ -202,14 +208,17 @@ function setAutostart(on) {
 }
 
 // ───────── auto-update (GitHub Releases; active once "build.publish" points at a real repo) ─────────
-async function checkUpdates(manual) {
-  if (!app.isPackaged) { if (manual) note('Обновления', 'Проверка работает только в установленной версии.'); return; }
+async function checkUpdates(manual, silent) {
+  const say = t => { if (manual && !silent) note('Обновления', t); return t; };
+  if (!app.isPackaged) return { ok: false, text: say('Проверка работает только в установленной версии.') };
   try {
     const { autoUpdater } = require('electron-updater');
     autoUpdater.logger = { info: log, warn: log, error: log, debug: () => {} };
     const r = await autoUpdater.checkForUpdatesAndNotify();
-    if (manual && !r) note('Обновления', 'Установлена последняя версия.');
-  } catch (e) { log(`update: ${e.message}`); if (manual) note('Обновления', 'Не удалось проверить: ' + e.message.slice(0, 120)); }
+    const v = r && r.updateInfo && r.updateInfo.version;
+    if (v && v !== app.getVersion()) return { ok: true, update: v, text: say(`Найдена версия ${v} — скачивается, установится при перезапуске приложения.`) };
+    return { ok: true, text: say('Установлена последняя версия.') };
+  } catch (e) { log(`update: ${e.message}`); return { ok: false, text: say('Не удалось проверить: ' + e.message.slice(0, 120)) }; }
 }
 function note(title, body) { if (Notification.isSupported()) new Notification({ title, body }).show(); }
 
@@ -229,6 +238,28 @@ async function findPython() {
   return { cmd: '', version: '', mt5: false };
 }
 ipcMain.handle('setup:status', () => status());
+
+// ───────── main-window bridge (Settings panel) ─────────
+const fromMain = e => !!S.win && e.sender === S.win.webContents;
+const maskHome = x => String(x).split(os.homedir()).join('~');
+function guard(fn) { return (e, ...a) => { if (!fromMain(e)) throw new Error('forbidden'); return fn(...a); }; }
+ipcMain.handle('app:info', guard(() => ({
+  version: app.getVersion(), platform: process.platform, arch: process.arch, electron: process.versions.electron, packaged: app.isPackaged,
+  autostart: settings.autostart, claude: maskHome(findClaude() || ''), logDir: maskHome(LOG_DIR), dataDir: maskHome(HOME), port: S.port,
+})));
+ipcMain.handle('app:openLogs', guard(() => shell.openPath(LOG_DIR)));
+ipcMain.handle('app:openData', guard(() => shell.openPath(HOME)));
+ipcMain.handle('app:openSetup', guard(() => { openSetup(); return true; }));
+ipcMain.handle('app:setAutostart', guard(on => { setAutostart(on); return settings.autostart; }));
+ipcMain.handle('app:checkUpdates', guard(() => checkUpdates(true, true)));
+ipcMain.handle('app:restartServer', guard(async () => { await stopServer(); return true; })); // exit → auto-restart + reload
+ipcMain.handle('app:logTail', guard(() => {
+  try {
+    const f = path.join(LOG_DIR, 'server.log'); const st = fs.statSync(f); const n = Math.min(st.size, 64000);
+    const fd = fs.openSync(f, 'r'); const b = Buffer.alloc(n); fs.readSync(fd, b, 0, n, st.size - n); fs.closeSync(fd);
+    return maskHome(b.toString('utf8').split(/\r?\n/).slice(-150).join('\n'));
+  } catch (e) { return `(лог недоступен: ${e.message})`; }
+}));
 ipcMain.handle('setup:installClaude', async e => {
   const send = l => { try { e.sender.send('setup:log', l); } catch { /* window closed */ } };
   const r = isWin
