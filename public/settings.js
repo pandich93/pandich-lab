@@ -127,11 +127,30 @@
       ? `<label class="st-check"><input type="checkbox" id="stAuto" ${d.autostart ? 'checked' : ''}> Запускать при входе в систему</label>
          <div class="st-acts"><button class="st-btn" data-d="checkUpdates">Проверить обновления</button><button class="st-btn" data-d="openSetup">Мастер настройки</button><button class="st-btn" data-d="openLogs">Открыть логи</button><button class="st-btn" data-d="openData">Папка данных</button><button class="st-btn" data-d="restartServer">Перезапустить сервер</button></div>`
       : `<div class="st-acts"><button class="st-btn" data-w="restart">Перезапустить сервер</button></div>`;
-    const n = ST.notes.app;
-    return `<div class="st-card st-app"><div class="st-row"><b>Приложение</b></div>
+    const n = ST.notes.app, u = d && (ST.upd || d.update);
+    if (u) kv.push(['Обновления', updText(u)]);
+    const updBtn = !u ? '' : u.state === 'ready' ? `<button class="st-btn pri" data-upd="install">⬆ Перезапустить и обновить до ${esc(u.version)}</button>`
+      : u.state === 'manual' ? `<a class="st-btn pri" href="https://github.com/pandich93/pandich-lab/releases/latest/download/PandichLab-mac.dmg" target="_blank" rel="noopener">Скачать ${esc(u.version)} ↗</a>` : '';
+    return `<div class="st-card st-app"><div class="st-row"><b>Приложение</b></div>${updBtn ? `<div class="st-acts">${updBtn}</div>` : ''}
       <div class="st-kv">${kv.map(([k, v]) => `<span>${esc(k)}</span><span>${esc(v)}</span>`).join('')}</div>
       ${n ? `<div class="st-note ${n.ok ? 'ok' : 'bad'}">${esc(n.text)}</div>` : ''}${acts}</div>`;
   }
+
+  function updText(u) {
+    return { off: `выключены — ${u.reason}`, idle: 'проверка через несколько секунд после запуска, затем каждые 4 часа', checking: 'проверяю…', none: `последняя версия${u.checkedAt ? ' · проверено ' + new Date(u.checkedAt).toLocaleTimeString() : ''}`,
+      downloading: `скачиваю ${u.version}… ${u.percent}%`, ready: `версия ${u.version} скачана и готова к установке`, manual: `доступна ${u.version} — обновите вручную`, error: `ошибка проверки: ${u.error}` }[u.state] || u.state;
+  }
+  // desktop: live update state from the main process → Settings + a pill in the top bar when ready
+  const pill = document.createElement('button'); pill.className = 'st-upd hidden'; gear.before(pill);
+  pill.onclick = () => { if (ST.upd && ST.upd.state === 'ready') D.installUpdate(); else open(); };
+  function onUpd(u) {
+    ST.upd = u;
+    const show = u && (u.state === 'ready' || u.state === 'manual');
+    pill.classList.toggle('hidden', !show);
+    if (show) { pill.textContent = u.state === 'ready' ? `⬆ Обновить до ${u.version}` : `Доступна ${u.version}`; pill.title = u.state === 'ready' ? 'Перезапустить приложение и установить обновление' : 'Открыть настройки'; }
+    if (!modal.classList.contains('hidden')) render();
+  }
+  if (D) { window.addEventListener('ql:update', e => onUpd(e.detail)); if (D.updateState) D.updateState().then(onUpd).catch(() => {}); }
 
   function render() {
     const body = $('stBody'), h = ST.health;
@@ -149,12 +168,13 @@
     body.querySelectorAll('[data-copy]').forEach(b => { b.onclick = async () => { await copyText(b.dataset.copy); b.textContent = 'Скопировано'; setTimeout(() => { b.textContent = 'Копировать'; }, 1500); }; });
     body.querySelectorAll('[data-d]').forEach(b => { b.onclick = () => desk(b.dataset.d, b); });
     body.querySelectorAll('[data-w]').forEach(b => { b.onclick = async () => { b.disabled = true; b.textContent = 'Перезапускаю…'; try { await req('/api/admin/restart', {}); } catch { /* connection drops */ } setTimeout(() => location.reload(), 3500); }; });
+    body.querySelectorAll('[data-upd]').forEach(b => { b.onclick = () => { b.disabled = true; b.textContent = 'Перезапускаю…'; D.installUpdate(); }; });
     const au = $('stAuto'); if (au) au.onchange = async () => { ST.desk.autostart = await D.setAutostart(au.checked); };
   }
   async function desk(fn, btn) {
     if (!D || !D[fn]) return;
     if (fn === 'restartServer') { btn.disabled = true; btn.textContent = 'Перезапускаю…'; D.restartServer(); return; } // window reloads by itself
-    if (fn === 'checkUpdates') { btn.disabled = true; btn.textContent = 'Проверяю…'; const r = await D.checkUpdates().catch(e => ({ ok: false, text: e.message })); ST.notes.app = { ok: r.ok, text: r.text }; render(); return; }
+    if (fn === 'checkUpdates') { btn.disabled = true; btn.textContent = 'Проверяю…'; const r = await D.checkUpdates().catch(e => ({ ok: false, text: e.message })); ST.notes.app = { ok: r.ok, text: r.text }; if (D.updateState) ST.upd = await D.updateState().catch(() => ST.upd); render(); return; }
     D[fn]();
   }
 

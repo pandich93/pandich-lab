@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld('pandichDesktop', {
   openSetup: () => ipcRenderer.invoke('app:openSetup'),
   setAutostart: on => ipcRenderer.invoke('app:setAutostart', !!on),
   checkUpdates: () => ipcRenderer.invoke('app:checkUpdates'),
+  updateState: () => ipcRenderer.invoke('app:updateState'),
+  installUpdate: () => ipcRenderer.invoke('app:installUpdate'),
   restartServer: () => ipcRenderer.invoke('app:restartServer'),
   logTail: () => ipcRenderer.invoke('app:logTail'),
 });

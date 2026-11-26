@@ -195,6 +195,7 @@ function showError(text) {
 // ───────── tray / menu bar ─────────
 function trayMenu() {
   return Menu.buildFromTemplate([
+    ...(U.state === 'ready' ? [{ label: `⬆ Перезапустить и обновить до ${U.version}`, click: () => installUpdate(true) }, { type: 'separator' }] : []),
     { label: 'Открыть Pandich Lab', click: showMain },
     { label: 'Настройки и диагностика', click: openSettings },
     { type: 'separator' },
@@ -202,7 +203,7 @@ function trayMenu() {
     { label: 'Мастер настройки (Claude Code, MT5)', click: openSetup },
     { label: 'Папка данных', click: () => shell.openPath(HOME) },
     { label: 'Логи', click: () => shell.openPath(LOG_DIR) },
-    { label: 'Проверить обновления', click: () => checkUpdates(true) },
+    { label: U.state === 'downloading' ? `Скачиваю обновление ${U.version}… ${U.percent}%` : 'Проверить обновления', enabled: U.state !== 'downloading', click: async () => { const r = await checkUpdates(true); note('Обновления', r.text); } },
     { type: 'separator' },
     { label: 'Перезапустить сервер', click: async () => { await stopServer(); } }, // exit → auto-restart
     { label: 'Выход', click: () => { S.quitting = true; app.quit(); } },
@@ -221,18 +222,138 @@ function setAutostart(on) {
   if (S.tray) S.tray.setContextMenu(trayMenu());
 }
 
-// ───────── auto-update (GitHub Releases; active once "build.publish" points at a real repo) ─────────
-async function checkUpdates(manual, silent) {
-  const say = t => { if (manual && !silent) note('Обновления', t); return t; };
-  if (!app.isPackaged) return { ok: false, text: say('Проверка работает только в установленной версии.') };
-  try {
+// ───────── auto-update (GitHub Releases) ─────────
+// Windows: electron-updater (NSIS, works unsigned) — downloads in the background, then "Перезапустить и обновить".
+// macOS: Squirrel.Mac needs an Apple Developer ID signature, so we update ourselves: download the new .dmg from the
+// release, copy the app out of it and swap the bundle after quit (a file fetched by the app gets no quarantine flag).
+const REPO = 'pandich93/pandich-lab';
+const UPDATE_EVERY = 4 * 3600 * 1000;
+const U = { state: 'idle', version: '', percent: 0, error: '', checkedAt: 0, reason: '', mac: null, installing: false };
+let winUpdater = null;
+const newer = (a, b) => { const x = String(a).replace(/^v/, '').split('.').map(Number), y = String(b).replace(/^v/, '').split('.').map(Number); for (let k = 0; k < 3; k++) { if ((x[k] || 0) !== (y[k] || 0)) return (x[k] || 0) > (y[k] || 0); } return false; };
+function updateChanged() {
+  if (S.tray) S.tray.setContextMenu(trayMenu());
+  const d = JSON.stringify({ ...U, mac: undefined, current: app.getVersion() });
+  if (S.win) S.win.webContents.executeJavaScript(`window.dispatchEvent(new CustomEvent('ql:update',{detail:${d}}))`).catch(() => { /* page loading */ });
+}
+function setU(patch) { Object.assign(U, patch); updateChanged(); }
+function updaterAvailable() {
+  if (!app.isPackaged) return 'локальный запуск из исходников';
+  if (isWin && !fs.existsSync(path.join(process.resourcesPath, 'app-update.yml'))) return 'сборка без публикации (собрана вручную) — обновления только переустановкой';
+  return '';
+}
+function initUpdater() {
+  const off = updaterAvailable();
+  if (off) { U.state = 'off'; U.reason = off; return; }
+  if (isWin) {
     const { autoUpdater } = require('electron-updater');
+    winUpdater = autoUpdater;
     autoUpdater.logger = { info: log, warn: log, error: log, debug: () => {} };
-    const r = await autoUpdater.checkForUpdatesAndNotify();
-    const v = r && r.updateInfo && r.updateInfo.version;
-    if (v && v !== app.getVersion()) return { ok: true, update: v, text: say(`Найдена версия ${v} — скачивается, установится при перезапуске приложения.`) };
-    return { ok: true, text: say('Установлена последняя версия.') };
-  } catch (e) { log(`update: ${e.message}`); return { ok: false, text: say('Не удалось проверить: ' + e.message.slice(0, 120)) }; }
+    autoUpdater.autoDownload = true;
+    autoUpdater.autoInstallOnAppQuit = false; // we install explicitly (our quit path stops the server first)
+    autoUpdater.on('checking-for-update', () => setU({ state: 'checking', error: '' }));
+    autoUpdater.on('update-not-available', () => setU({ state: 'none', checkedAt: Date.now() }));
+    autoUpdater.on('update-available', i => setU({ state: 'downloading', version: i.version, percent: 0, checkedAt: Date.now() }));
+    autoUpdater.on('download-progress', p => { const pct = Math.floor(p.percent || 0); if (pct !== U.percent) setU({ percent: pct }); });
+    autoUpdater.on('update-downloaded', i => { setU({ state: 'ready', version: i.version, percent: 100 }); readyNote(); });
+    autoUpdater.on('error', e => { log(`update: ${e && e.message}`); setU({ state: 'error', error: String(e && e.message || e).slice(0, 200), checkedAt: Date.now() }); });
+  }
+  setTimeout(() => checkUpdates(false), 15000);
+  setInterval(() => { if (!['downloading', 'ready'].includes(U.state)) checkUpdates(false); }, UPDATE_EVERY);
+}
+function readyNote() {
+  if (!Notification.isSupported()) return;
+  const n = new Notification({ title: `Pandich Lab ${U.version} готов к установке`, body: 'Нажмите, чтобы перезапустить и обновить. Или обновится при выходе из приложения.' });
+  n.on('click', () => installUpdate()); n.show();
+}
+async function checkUpdates(manual) {
+  if (U.state === 'off') return { ok: false, text: `Автообновление выключено: ${U.reason}.` };
+  if (U.state === 'ready') return { ok: true, update: U.version, text: `Версия ${U.version} скачана — нажмите «Перезапустить и обновить».` };
+  if (U.state === 'downloading') return { ok: true, update: U.version, text: `Скачиваю версию ${U.version}… ${U.percent}%` };
+  try {
+    if (isWin) {
+      const r = await winUpdater.checkForUpdates();
+      const v = r && r.updateInfo && r.updateInfo.version;
+      if (v && newer(v, app.getVersion())) return { ok: true, update: v, text: `Найдена версия ${v} — скачиваю, потом предложу перезапустить.` };
+      return { ok: true, text: 'Установлена последняя версия.' };
+    }
+    if (isMac) return await macCheck(manual);
+    return { ok: false, text: 'Автообновление есть только для Windows и macOS.' };
+  } catch (e) { log(`update: ${e.message}`); setU({ state: 'error', error: e.message.slice(0, 200), checkedAt: Date.now() }); return { ok: false, text: 'Не удалось проверить: ' + e.message.slice(0, 120) }; }
+}
+
+// ── macOS self-updater
+function macBundle() { return path.resolve(process.execPath, '..', '..', '..'); } // …/Pandich Lab.app/Contents/MacOS/Pandich Lab
+function macCanSwap() {
+  const b = macBundle();
+  if (!b.endsWith('.app') || b.includes('/AppTranslocation/') || b.startsWith('/Volumes/')) return false;
+  try { fs.accessSync(path.dirname(b), fs.constants.W_OK); fs.accessSync(b, fs.constants.W_OK); return true; } catch { return false; }
+}
+async function macCheck(manual) {
+  setU({ state: 'checking', error: '' });
+  const r = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { 'user-agent': 'pandich-lab', accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(20000) });
+  if (!r.ok) throw new Error(`GitHub ${r.status}`);
+  const rel = await r.json();
+  const v = String(rel.tag_name || '').replace(/^v/, '');
+  if (!v || !newer(v, app.getVersion())) { setU({ state: 'none', checkedAt: Date.now() }); return { ok: true, text: 'Установлена последняя версия.' }; }
+  const assets = rel.assets || [];
+  const dmg = assets.find(a => /-mac-universal\.dmg$/.test(a.name)) || assets.find(a => /\.dmg$/.test(a.name));
+  if (!dmg) throw new Error('в релизе нет .dmg');
+  if (!macCanSwap()) { setU({ state: 'manual', version: v, checkedAt: Date.now(), mac: { url: dmg.browser_download_url } }); if (manual === false) manualNote(); return { ok: true, update: v, text: `Доступна версия ${v}. Приложение запущено не из «Программ», поэтому обновите вручную: скачайте .dmg и перетащите в «Программы».` }; }
+  macDownload(v, dmg).catch(e => { log(`update(mac): ${e.message}`); setU({ state: 'error', error: e.message.slice(0, 200) }); });
+  return { ok: true, update: v, text: `Найдена версия ${v} — скачиваю, потом предложу перезапустить.` };
+}
+function manualNote() {
+  if (!Notification.isSupported() || U.notified === U.version) return;
+  U.notified = U.version;
+  const n = new Notification({ title: `Доступна Pandich Lab ${U.version}`, body: 'Нажмите, чтобы скачать новую версию.' });
+  n.on('click', () => shell.openExternal(`https://github.com/${REPO}/releases/latest/download/PandichLab-mac.dmg`)); n.show();
+}
+async function macDownload(v, asset) {
+  setU({ state: 'downloading', version: v, percent: 0, checkedAt: Date.now() });
+  const dir = path.join(USER_DIR, 'update'); fs.rmSync(dir, { recursive: true, force: true }); fs.mkdirSync(dir, { recursive: true });
+  const dmg = path.join(dir, 'update.dmg'), mnt = path.join(dir, 'mnt'), app2 = path.join(dir, 'Pandich Lab.app');
+  const r = await fetch(asset.browser_download_url, { headers: { 'user-agent': 'pandich-lab' }, signal: AbortSignal.timeout(1800000) });
+  if (!r.ok || !r.body) throw new Error(`HTTP ${r.status}`);
+  const total = Number(r.headers.get('content-length')) || asset.size || 0;
+  const out = fs.createWriteStream(dmg); let got = 0;
+  for await (const c of r.body) { got += c.length; if (!out.write(c)) await new Promise(res => out.once('drain', res)); const pct = total ? Math.floor(got / total * 100) : 0; if (pct !== U.percent) setU({ percent: pct }); }
+  await new Promise((res, rej) => out.end(e => e ? rej(e) : res()));
+  if (asset.size && fs.statSync(dmg).size !== asset.size) throw new Error('файл скачался не полностью');
+  fs.mkdirSync(mnt, { recursive: true });
+  let x = await run('/usr/bin/hdiutil', ['attach', '-nobrowse', '-readonly', '-noautoopen', '-mountpoint', mnt, dmg], { timeout: 120000 });
+  if (x.code !== 0) throw new Error(`hdiutil attach: ${x.out.slice(0, 200)}`);
+  try {
+    const name = fs.readdirSync(mnt).find(n => n.endsWith('.app'));
+    if (!name) throw new Error('в .dmg нет приложения');
+    x = await run('/usr/bin/ditto', [path.join(mnt, name), app2], { timeout: 300000 });
+    if (x.code !== 0) throw new Error(`ditto: ${x.out.slice(0, 200)}`);
+  } finally { await run('/usr/bin/hdiutil', ['detach', mnt, '-force'], { timeout: 60000 }); try { fs.unlinkSync(dmg); } catch { /* temp */ } }
+  setU({ state: 'ready', percent: 100, mac: { app: app2 } });
+  readyNote();
+}
+function macSwap(relaunch) {
+  const script = path.join(USER_DIR, 'update', 'swap.sh');
+  fs.writeFileSync(script, `#!/bin/sh
+PID="$1"; APP="$2"; NEW="$3"; RELAUNCH="$4"
+while kill -0 "$PID" 2>/dev/null; do sleep 0.3; done
+rm -rf "$APP.old"
+if mv "$APP" "$APP.old" && /usr/bin/ditto "$NEW" "$APP"; then rm -rf "$APP.old" "$NEW"; else rm -rf "$APP"; mv "$APP.old" "$APP"; fi
+/usr/bin/xattr -dr com.apple.quarantine "$APP" 2>/dev/null
+[ "$RELAUNCH" = 1 ] && /usr/bin/open "$APP"
+exit 0
+`, { mode: 0o755 });
+  spawn('/bin/sh', [script, String(process.pid), macBundle(), U.mac.app, relaunch ? '1' : '0'], { detached: true, stdio: 'ignore' }).unref();
+}
+// Install now (from the notification, tray, or Settings) or on quit. The server is always stopped first.
+async function installUpdate(relaunch = true) {
+  if (U.state !== 'ready' || U.installing) return false;
+  U.installing = true; S.quitting = true;
+  log(`update: installing ${U.version} (relaunch=${relaunch})`);
+  await stopServer();
+  if (isWin) { winUpdater.quitAndInstall(true, relaunch); return true; } // silent NSIS; app.quit() happens inside
+  if (isMac) { macSwap(relaunch); app.exit(0); return true; }
+  return false;
 }
 function note(title, body) { if (Notification.isSupported()) new Notification({ title, body }).show(); }
 
@@ -274,12 +395,15 @@ function guard(fn) { return (e, ...a) => { if (!fromMain(e)) throw new Error('fo
 ipcMain.handle('app:info', guard(() => ({
   version: app.getVersion(), platform: process.platform, arch: process.arch, electron: process.versions.electron, packaged: app.isPackaged,
   autostart: settings.autostart, claude: maskHome(findClaude() || ''), logDir: maskHome(LOG_DIR), dataDir: maskHome(HOME), port: S.port,
+  update: { ...U, mac: undefined },
 })));
 ipcMain.handle('app:openLogs', guard(() => shell.openPath(LOG_DIR)));
 ipcMain.handle('app:openData', guard(() => shell.openPath(HOME)));
 ipcMain.handle('app:openSetup', guard(() => { openSetup(); return true; }));
 ipcMain.handle('app:setAutostart', guard(on => { setAutostart(on); return settings.autostart; }));
-ipcMain.handle('app:checkUpdates', guard(() => checkUpdates(true, true)));
+ipcMain.handle('app:checkUpdates', guard(() => checkUpdates(true)));
+ipcMain.handle('app:updateState', guard(() => ({ ...U, mac: undefined, current: app.getVersion() })));
+ipcMain.handle('app:installUpdate', guard(() => installUpdate(true)));
 ipcMain.handle('app:restartServer', guard(async () => { await stopServer(); return true; })); // exit → auto-restart + reload
 ipcMain.handle('app:logTail', guard(() => {
   try {
@@ -373,11 +497,12 @@ app.whenReady().then(async () => {
   if (!ok) { showError('Не удалось запустить сервер Pandich Lab.'); return; }
   createMain();
   if (!settings.setupDone) openSetup();
-  setTimeout(() => checkUpdates(false), 15000);
+  initUpdater();
 });
 app.on('activate', showMain); // macOS: click on the Dock icon
 app.on('before-quit', () => { S.quitting = true; });
 app.on('window-all-closed', () => { /* stay in tray / menu bar */ });
 app.on('will-quit', async e => {
+  if (U.state === 'ready' && !U.installing) { e.preventDefault(); await installUpdate(false); return; } // "Выход" with an update downloaded → install it, no relaunch
   if (S.proc) { e.preventDefault(); await stopServer(); app.exit(0); }
 });

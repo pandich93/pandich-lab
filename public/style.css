@@ -506,3 +506,4 @@ body.embed .legend{max-width:85%}
 .st-chatbtn{display:block;margin-top:7px;background:#26282e;border:1px solid #363940;color:var(--text);border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer}
 .st-chatbtn:hover{background:#2e3138}
 .st-fn{flex:1;min-width:180px}.st-foot .st-btn{white-space:nowrap}
+.st-upd{background:#2962ff;border:none;color:#fff;border-radius:8px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer}.st-upd:hover{background:#3d73ff}.st-upd.hidden{display:none}
