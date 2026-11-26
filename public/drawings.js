@@ -57,6 +57,7 @@ const ICON = {
   trash: I('<path d="M3 5h12M7 5V3h4v2M5 5l1 11h6l1-11"/>'),
   undo: I('<path d="M6 4L2 8l4 4M2 8h9a5 5 0 010 10"/>'),
   clone: I('<rect x="6" y="6" width="9" height="9" rx="1"/><path d="M12 6V3H3v9h3"/>'),
+  gear: I('<circle cx="9" cy="9" r="2.3"/><path d="M9 1.8v2M9 14.2v2M16.2 9h-2M3.8 9h-2M14.1 3.9l-1.4 1.4M5.3 12.7l-1.4 1.4M14.1 14.1l-1.4-1.4M5.3 5.3L3.9 3.9"/>'),
 };
 
 // ───────── tool catalogue ─────────
@@ -93,6 +94,22 @@ const DEFAULT_COLOR = { long: '#089981', short: '#F23645', price_range: '#2962FF
 const FIB_RETR = [[0, '#787B86'], [0.236, '#F23645'], [0.382, '#FF9800'], [0.5, '#4CAF50'], [0.618, '#089981'], [0.786, '#00BCD4'], [1, '#787B86'], [1.618, '#2962FF'], [2.618, '#F23645'], [3.618, '#9C27B0'], [4.236, '#E91E63']];
 const FIB_EXT = [[0, '#787B86'], [0.236, '#F23645'], [0.382, '#FF9800'], [0.5, '#4CAF50'], [0.618, '#089981'], [0.786, '#00BCD4'], [1, '#787B86'], [1.618, '#2962FF'], [2.618, '#F23645']];
 const FIB_SEQ = [0, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233];
+// Fibonacci levels are editable per drawing: style.levels = [{ v, c, on }]; without it the tool defaults below are used
+const lv = (arr, on = true) => arr.map(([v, c]) => ({ v, c, on }));
+const FIB_DEFAULTS = {
+  fib_retr: [...lv(FIB_RETR), ...lv([[1.272, '#FF9800'], [1.414, '#4CAF50'], [2, '#089981'], [3, '#00BCD4']], false)].sort((a, b) => a.v - b.v),
+  fib_ext: [...lv(FIB_EXT), ...lv([[1.272, '#FF9800'], [1.414, '#4CAF50'], [2, '#089981'], [3.618, '#9C27B0'], [4.236, '#E91E63']], false)].sort((a, b) => a.v - b.v),
+  fib_channel: lv(FIB_RETR.slice(0, 8)),
+  fib_fan: lv(FIB_RETR.slice(0, 7)),
+  fib_circles: lv([[0.236, '#F23645'], [0.382, '#FF9800'], [0.5, '#4CAF50'], [0.618, '#089981'], [0.786, '#00BCD4'], [1, '#787B86'], [1.618, '#2962FF']]),
+  fib_time: FIB_SEQ.map((v, i) => ({ v, c: FIB_RETR[i % FIB_RETR.length][1], on: true })),
+};
+const LEVELED = new Set(Object.keys(FIB_DEFAULTS));
+const defLevels = type => (FIB_DEFAULTS[type] || []).map(l => ({ ...l }));
+function levelsOf(d) {
+  const L = Array.isArray(d.style.levels) && d.style.levels.length ? d.style.levels : (FIB_DEFAULTS[d.type] || []);
+  return L.filter(l => l.on !== false && l.v !== '' && l.v !== null && Number.isFinite(+l.v)).map(l => [+l.v, l.c || d.style.color]).sort((a, b) => a[0] - b[0]);
+}
 const GANN_LV = [0, 0.25, 0.382, 0.5, 0.618, 0.75, 1];
 const GANN_FAN = [[8, '8×1'], [4, '4×1'], [3, '3×1'], [2, '2×1'], [1, '1×1'], [1 / 2, '1×2'], [1 / 3, '1×3'], [1 / 4, '1×4'], [1 / 8, '1×8']];
 
@@ -204,7 +221,8 @@ class G {
 }
 
 // ───────── renderers ─────────
-function levelLabel(k, p) { return `${k} (${fmtP(p)})`; }
+function levelText(k, s) { return s.showLevels === false ? '' : s.pct ? `${+(k * 100).toFixed(2)}%` : String(k); }
+function levelLabel(k, p, s = {}) { const a = levelText(k, s), b = s.showPrices === false ? '' : fmtP(p); return a && b ? `${a} (${b})` : a || b; }
 
 function render(d, P, g, selected) {
   const s = d.style, col = s.color, lw = s.width, dash = s.dash, W = g.w, H = g.h;
@@ -237,15 +255,17 @@ function render(d, P, g, selected) {
     }
     case 'fib_retr': {
       if (P.length < 2) break;
-      const [a, b] = P, p1 = d.pts[0].p, p2 = d.pts[1].p;
-      const xl = Math.min(a.x, b.x), xr = s.extend ? W : Math.max(a.x, b.x);
+      const [a, b] = P; let p1 = d.pts[0].p, p2 = d.pts[1].p; if (s.reverse) [p1, p2] = [p2, p1];
+      const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x), xl = s.extendLeft ? 0 : x0, xr = s.extend ? W : x1;
+      const right = s.labelPos === 'right', fa = s.fillAlpha ?? 0.08;
+      const lx = right ? (s.extend ? W - 4 : x1 + 4) : (s.extendLeft ? 4 : x0 - 4), la = right ? (s.extend ? 'right' : 'left') : (s.extendLeft ? 'left' : 'right');
       g.line(a.x, a.y, b.x, b.y, '#787B86', 1, 'dashed');
       let prevY = null;
-      for (const [k, c] of FIB_RETR) {
+      for (const [k, c] of levelsOf(d)) {
         const p = p2 + (p1 - p2) * k, y = Y(p); if (y === null) continue;
-        if (prevY !== null && s.fill !== false) g.rect(xl, prevY, xr, y, alpha(c, 0.08), null);
+        if (prevY !== null && s.fill !== false && fa > 0) g.rect(xl, prevY, xr, y, alpha(c, fa), null);
         g.line(xl, y, xr, y, c, lw, dash);
-        g.label(levelLabel(k, p), xl - 4, y, { tc: c, align: 'right', pad: 1 });
+        const t = levelLabel(k, p, s); if (t) g.label(t, lx, y, { tc: c, align: la, pad: 1 });
         prevY = y;
       }
       break;
@@ -255,13 +275,17 @@ function render(d, P, g, selected) {
       g.line(P[0].x, P[0].y, P[1].x, P[1].y, '#787B86', 1, 'dashed');
       if (P.length < 3) break;
       g.line(P[1].x, P[1].y, P[2].x, P[2].y, '#787B86', 1, 'dashed');
-      const A = d.pts[0].p, B = d.pts[1].p, C = d.pts[2].p;
-      const xl = P[2].x, xr = s.extend ? W : P[2].x + Math.max(40, Math.abs(P[1].x - P[0].x));
+      const A = d.pts[0].p, B = d.pts[1].p, C = d.pts[2].p, dir = s.reverse ? -1 : 1;
+      const x0 = P[2].x, x1 = P[2].x + Math.max(40, Math.abs(P[1].x - P[0].x)), xl = s.extendLeft ? 0 : x0, xr = s.extend ? W : x1;
+      const right = s.labelPos !== 'left', fa = s.fillAlpha ?? 0.08;
+      const lx = right ? (s.extend ? W - 4 : xr + 4) : (s.extendLeft ? 4 : xl - 4), la = right ? (s.extend ? 'right' : 'left') : (s.extendLeft ? 'left' : 'right');
       let prevY = null;
-      for (const [k, c] of FIB_EXT) {
-        const p = C + (B - A) * k, y = Y(p); if (y === null) continue;
-        if (prevY !== null && s.fill !== false) g.rect(xl, prevY, xr, y, alpha(c, 0.08), null);
-        g.line(xl, y, xr, y, c, lw, dash); g.label(levelLabel(k, p), xr + 4, y, { tc: c, align: 'left', pad: 1 }); prevY = y;
+      for (const [k, c] of levelsOf(d)) {
+        const p = C + (B - A) * k * dir, y = Y(p); if (y === null) continue;
+        if (prevY !== null && s.fill !== false && fa > 0) g.rect(xl, prevY, xr, y, alpha(c, fa), null);
+        g.line(xl, y, xr, y, c, lw, dash);
+        const t = levelLabel(k, p, s); if (t) g.label(t, lx, y, { tc: c, align: la, pad: 1 });
+        prevY = y;
       }
       break;
     }
@@ -270,7 +294,7 @@ function render(d, P, g, selected) {
       const [a, b] = P; g.line(a.x, a.y, b.x, b.y, '#787B86', lw, dash);
       if (P.length < 3) break;
       const c = P[2]; const ly = a.x === b.x ? a.y : a.y + (b.y - a.y) * (c.x - a.x) / (b.x - a.x); const dy = c.y - ly;
-      for (const [k, col2] of FIB_RETR.slice(0, 8)) { const seg = g.ext(a.x, a.y + dy * k, b.x, b.y + dy * k, false, true); g.line(...seg, col2, lw, dash); g.label(String(k), a.x - 4, a.y + dy * k, { tc: col2, align: 'right', pad: 1 }); }
+      for (const [k, col2] of levelsOf(d)) { const seg = g.ext(a.x, a.y + dy * k, b.x, b.y + dy * k, false, true); g.line(...seg, col2, lw, dash); const t = levelText(k, s); if (t) g.label(t, a.x - 4, a.y + dy * k, { tc: col2, align: 'right', pad: 1 }); }
       break;
     }
     case 'fib_time': {
@@ -278,21 +302,22 @@ function render(d, P, g, selected) {
       const [a, b] = P, dx = b.x - a.x;
       g.line(a.x, a.y, b.x, b.y, '#787B86', 1, 'dashed');
       if (Math.abs(dx) < 1) break;
-      FIB_SEQ.forEach((f, i) => { const x = a.x + f * dx; if (x < -5 || x > W + 5) return; const c = FIB_RETR[i % FIB_RETR.length][1]; g.line(x, 0, x, H, c, lw, dash); g.label(String(f), x + 3, H - 4, { tc: c, align: 'left', base: 'bottom', pad: 1 }); });
+      for (const [f, c] of levelsOf(d)) { const x = a.x + f * dx; if (x < -5 || x > W + 5) continue; g.line(x, 0, x, H, c, lw, dash); if (s.showLevels !== false) g.label(String(f), x + 3, H - 4, { tc: c, align: 'left', base: 'bottom', pad: 1 }); }
       break;
     }
     case 'fib_fan': {
       if (P.length < 2) break;
       const [a, b] = P;
-      for (const [k, c] of FIB_RETR.slice(0, 7)) { const ty = b.y + (a.y - b.y) * k; const seg = g.ext(a.x, a.y, b.x, ty, false, true); g.line(...seg, c, lw, dash); g.label(String(k), b.x + 4, ty, { tc: c, align: 'left', pad: 1 }); }
+      for (const [k, c] of levelsOf(d)) { const ty = b.y + (a.y - b.y) * k; const seg = g.ext(a.x, a.y, b.x, ty, false, true); g.line(...seg, c, lw, dash); const t = levelText(k, s); if (t) g.label(t, b.x + 4, ty, { tc: c, align: 'left', pad: 1 }); }
       break;
     }
     case 'fib_circles': {
       if (P.length < 2) break;
       const [a, b] = P, R = Math.hypot(b.x - a.x, b.y - a.y); g.line(a.x, a.y, b.x, b.y, '#787B86', 1, 'dashed');
-      for (const [k, c] of [[0.236, '#F23645'], [0.382, '#FF9800'], [0.5, '#4CAF50'], [0.618, '#089981'], [0.786, '#00BCD4'], [1, '#787B86'], [1.618, '#2962FF']]) {
+      for (const [k, c] of levelsOf(d)) {
         g.ellipse(a.x, a.y, R * k, R * k, null, c, lw, dash);
         for (let i = 0; i < 48; i++) { const t1 = i / 48 * Math.PI * 2, t2 = (i + 1) / 48 * Math.PI * 2; g.segs.push([a.x + R * k * Math.cos(t1), a.y + R * k * Math.sin(t1), a.x + R * k * Math.cos(t2), a.y + R * k * Math.sin(t2)]); }
+        const t = levelText(k, s); if (t && R * k > 6) g.label(t, a.x + R * k + 3, a.y, { tc: c, align: 'left', pad: 1 });
       }
       break;
     }
@@ -479,7 +504,8 @@ function localXY(e) { const r = chartEl.getBoundingClientRect(); return { x: e.c
 function inPane({ x, y }) { const { w, h } = paneSize(); return x >= 0 && y >= 0 && x <= w && y <= h; }
 function newDrawing(type, pt) {
   const t = TOOL[type];
-  return { id: nid(), type, pts: t.n === 1 ? [pt] : [pt, { ...pt }], style: { color: DEFAULT_COLOR[type] || '#2962FF', width: type === 'brush' ? 2 : 1, dash: 'solid', fill: true, text: '', fontSize: 14, extend: false }, locked: false, hidden: false };
+  const style = { color: DEFAULT_COLOR[type] || '#2962FF', width: type === 'brush' ? 2 : 1, dash: 'solid', fill: true, text: '', fontSize: 14, extend: false, ...(styleDefaults(type) || {}) };
+  return { id: nid(), type, pts: t.n === 1 ? [pt] : [pt, { ...pt }], style, locked: false, hidden: false };
 }
 function finishCreate() {
   const d = D.creating; D.creating = null; D.mode = 'idle';
@@ -572,11 +598,17 @@ function onUp(e) {
 wrap.addEventListener('pointerdown', onDown, true);
 window.addEventListener('pointermove', onMove, true);
 window.addEventListener('pointerup', onUp, true);
-wrap.addEventListener('dblclick', e => { if (D.selected && TEXTUAL.has(D.selected.type)) { renderProps(true); e.stopPropagation(); } }, true);
+wrap.addEventListener('dblclick', e => {
+  if (!D.selected || D.tool) return;
+  e.stopPropagation();
+  if (D.selected.type === 'text' || D.selected.type === 'callout') renderProps(true); else openSettings(D.selected);
+}, true);
 
 document.addEventListener('keydown', e => {
   const tag = (e.target && e.target.tagName) || '';
   if (/INPUT|TEXTAREA|SELECT/.test(tag)) return;
+  if (DS) return; // settings dialog handles its own keys
+  if (e.altKey && e.code === 'KeyR') { e.preventDefault(); resetView(); return; }
   if (e.key === 'Escape') { if (D.creating) { D.creating = null; D.mode = 'idle'; } else if (D.tool) setTool(null); else { D.selected = null; renderProps(); } requestDraw(); }
   if ((e.key === 'Delete' || e.key === 'Backspace') && D.selected) { e.preventDefault(); removeDrawing(D.selected); }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
@@ -663,6 +695,7 @@ function renderProps(focusText) {
     (hasExt ? `<label class="dp-chk" title="Продлить вправо"><input type="checkbox" class="dp-ext" ${s.extend ? 'checked' : ''}>→</label>` : '') +
     (hasText ? `<input class="dp-text" placeholder="Текст" value="${String(s.text || '').replace(/"/g, '&quot;')}">` : '') +
     (d.type === 'text' || d.type === 'callout' ? `<select class="dp-fs" title="Размер шрифта">${[10, 12, 14, 18, 24, 32].map(v => `<option ${v === (s.fontSize || 14) ? 'selected' : ''}>${v}</option>`).join('')}</select>` : '') +
+    `<button class="dp-btn dp-cfg" title="Настройки (двойной клик / правая кнопка)">${ICON.gear}</button>` +
     `<button class="dp-btn dp-lock" title="${d.locked ? 'Разблокировать' : 'Заблокировать'}">${d.locked ? '🔒' : '🔓'}</button>` +
     `<button class="dp-btn dp-clone" title="Клонировать">${ICON.clone}</button>` +
     `<button class="dp-btn dp-del" title="Удалить (Del)">${ICON.trash}</button>`;
@@ -678,12 +711,213 @@ function renderProps(focusText) {
   const tx = props.querySelector('.dp-text');
   if (tx) { tx.oninput = e => { s.text = e.target.value; save(); requestDraw(); }; tx.onkeydown = e => { if (e.key === 'Enter' || e.key === 'Escape') tx.blur(); }; if (focusText) setTimeout(() => { tx.focus(); tx.select(); }, 0); }
   props.querySelector('.dp-lock').onclick = () => change(() => { d.locked = !d.locked; renderProps(); });
-  props.querySelector('.dp-clone').onclick = () => change(() => {
-    const c = JSON.parse(JSON.stringify(d)); c.id = nid(); c.locked = false;
-    c.pts = c.pts.map(q => ({ t: l2t((t2l(q.t) ?? 0) + 5), p: q.p })); D.items.push(c); D.selected = c; renderProps();
-  });
+  props.querySelector('.dp-cfg').onclick = () => openSettings(d);
+  props.querySelector('.dp-clone').onclick = () => cloneDrawing(d);
   props.querySelector('.dp-del').onclick = () => removeDrawing(d);
 }
+
+// ───────── templates (style defaults per tool) ─────────
+const DEF_KEY = type => 'ql.draw.def.' + type;
+const STYLE_KEYS = ['color', 'width', 'dash', 'fill', 'fillAlpha', 'extend', 'extendLeft', 'reverse', 'showPrices', 'showLevels', 'pct', 'labelPos', 'levels', 'fontSize'];
+function styleDefaults(type) { return store.get(DEF_KEY(type), null); }
+function saveStyleDefault(d) { const o = {}; for (const k of STYLE_KEYS) if (d.style[k] !== undefined) o[k] = JSON.parse(JSON.stringify(d.style[k])); store.set(DEF_KEY(d.type), o); }
+function resetStyleDefault(type) { try { localStorage.removeItem(DEF_KEY(type)); } catch { /* storage unavailable */ } }
+function cloneDrawing(d) {
+  snapshot();
+  const c = JSON.parse(JSON.stringify(d)); c.id = nid(); c.locked = false; c.hidden = false;
+  c.pts = c.pts.map(q => ({ t: l2t((t2l(q.t) ?? 0) + 5), p: q.p })); D.items.push(c); D.selected = c; save(); renderProps(); requestDraw();
+}
+function resetView() {
+  try { chart.timeScale().resetTimeScale(); chart.priceScale('right').applyOptions({ autoScale: true }); } catch { /* chart not ready */ }
+  requestDraw();
+}
+const escH = x => String(x ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const toastEl = document.createElement('div'); toastEl.className = 'dtoast hidden'; document.body.appendChild(toastEl);
+let toastT = null;
+function toast(msg) { toastEl.textContent = msg; toastEl.classList.remove('hidden'); clearTimeout(toastT); toastT = setTimeout(() => toastEl.classList.add('hidden'), 2600); }
+async function copyText(t) {
+  try { await navigator.clipboard.writeText(t); }
+  catch { const ta = Object.assign(document.createElement('textarea'), { value: t }); ta.style.cssText = 'position:fixed;left:-9999px'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch { /* no clipboard */ } ta.remove(); }
+  toast(`Скопировано: ${t}`);
+}
+
+// ───────── right-click menu ─────────
+const cm = document.createElement('div'); cm.className = 'dcm hidden'; document.body.appendChild(cm);
+function hideCM() { cm.classList.add('hidden'); }
+function showCM(e, items) {
+  cm.innerHTML = items.map((it, i) => it === '-' ? '<div class="dcm-sep"></div>'
+    : `<button data-i="${i}" class="${it.danger ? 'danger' : ''}" ${it.disabled ? 'disabled' : ''}><span class="dcm-ic">${it.icon || ''}</span><span class="dcm-l">${escH(it.label)}</span>${it.hint ? `<span class="dcm-hint">${escH(it.hint)}</span>` : ''}</button>`).join('');
+  cm.querySelectorAll('button').forEach(b => { b.onclick = () => { hideCM(); items[+b.dataset.i].run(); }; });
+  cm.classList.remove('hidden');
+  const w = cm.offsetWidth, h = cm.offsetHeight;
+  cm.style.left = Math.max(4, Math.min(e.clientX, innerWidth - w - 4)) + 'px';
+  cm.style.top = Math.max(4, Math.min(e.clientY, innerHeight - h - 4)) + 'px';
+}
+document.addEventListener('pointerdown', e => { if (!cm.classList.contains('hidden') && !cm.contains(e.target)) hideCM(); }, true);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') hideCM(); }, true);
+window.addEventListener('blur', hideCM);
+wrap.addEventListener('wheel', hideCM, { passive: true });
+
+const MI = { gear: ICON.gear, clone: ICON.clone, lock: ICON.lock, trash: ICON.trash, eye: ICON.eye };
+function drawingMenu(d) {
+  const i = D.items.indexOf(d), name = TOOL[d.type] ? TOOL[d.type].name : d.type;
+  return [
+    { icon: MI.gear, label: 'Настройки…', hint: '2× клик', run: () => openSettings(d) },
+    ...(LEVELED.has(d.type) ? [{ icon: '≡', label: 'Уровни Фибоначчи…', run: () => openSettings(d, 'levels') }] : []),
+    { icon: '⌖', label: 'Координаты…', run: () => openSettings(d, 'coords') },
+    '-',
+    { icon: MI.clone, label: 'Клонировать', run: () => cloneDrawing(d) },
+    { icon: MI.lock, label: d.locked ? 'Разблокировать' : 'Заблокировать', run: () => { snapshot(); d.locked = !d.locked; save(); renderProps(); requestDraw(); } },
+    { icon: MI.eye, label: 'Скрыть', run: () => window.QLDraw.setHidden(d.id, true) },
+    { icon: '⤒', label: 'На передний план', disabled: i === D.items.length - 1, run: () => { snapshot(); D.items.splice(D.items.indexOf(d), 1); D.items.push(d); save(); requestDraw(); } },
+    { icon: '⤓', label: 'На задний план', disabled: i === 0, run: () => { snapshot(); D.items.splice(D.items.indexOf(d), 1); D.items.unshift(d); save(); requestDraw(); } },
+    '-',
+    { icon: '★', label: 'Сделать стилем по умолчанию', run: () => { saveStyleDefault(d); toast(`Новые «${name}» будут рисоваться с этим стилем`); } },
+    { icon: MI.trash, label: 'Удалить', hint: 'Del', danger: true, run: () => removeDrawing(d) },
+  ];
+}
+function chartMenu(pt) {
+  const A = window.QLApp || {}, items = [{ icon: '⟲', label: 'Сбросить вид графика', hint: 'Alt+R', run: resetView }];
+  if (pt) {
+    const pr = fmtP(pt.p);
+    items.push({ icon: MI.clone, label: `Копировать цену ${pr}`, run: () => copyText(pr) });
+    items.push({ icon: '—', label: `Горизонтальная линия на ${pr}`, run: () => { snapshot(); const d = newDrawing('hline', { t: pt.t, p: pt.p }); D.items.push(d); D.selected = d; save(); renderProps(); requestDraw(); } });
+    if (window.QLReplay && !A.EMBED) items.push({ icon: '▶', label: 'Replay с этого бара', run: () => {
+      const l = Math.round(t2l(pt.t) ?? -1), n = bars().length;
+      if (l >= 10 && l < n - 1) window.QLReplay.startAt(l); else toast('Выберите бар внутри истории графика');
+    } });
+  }
+  items.push('-');
+  if (window.QLLibrary) items.push({ icon: 'ƒ', label: 'Индикаторы…', hint: '/', run: () => window.QLLibrary.open() });
+  for (const sc of ((A.S && A.S.scripts) || []).slice(0, 8)) items.push({ icon: MI.gear, label: `Настройки: ${sc.name || 'Script'}`, run: () => A.openInputs(sc) });
+  items.push('-');
+  const n = D.items.length;
+  items.push({ icon: MI.eye, label: D.hideAll ? 'Показать все рисунки' : 'Скрыть все рисунки', disabled: !n, run: () => { D.hideAll = !D.hideAll; renderBar(); requestDraw(); } });
+  items.push({ icon: MI.lock, label: D.lockAll ? 'Разблокировать все рисунки' : 'Заблокировать все рисунки', disabled: !n, run: () => { D.lockAll = !D.lockAll; renderBar(); } });
+  items.push({ icon: MI.trash, label: `Удалить все рисунки${n ? ` (${n})` : ''}`, disabled: !n, danger: true, run: () => { snapshot(); D.items = []; D.selected = null; save(); renderProps(); requestDraw(); toast('Рисунки удалены. Вернуть: Ctrl+Z'); } });
+  if (window.QLSettings) items.push('-', { icon: MI.gear, label: 'Настройки и подключения', run: () => window.QLSettings.open() });
+  return items;
+}
+wrap.addEventListener('contextmenu', e => {
+  if (e.target.closest && e.target.closest('.rp-ui, .dprops')) return;
+  e.preventDefault(); e.stopPropagation();
+  if (D.creating) { D.creating = null; D.mode = 'idle'; requestDraw(); return; } // right-click cancels a drawing in progress
+  const xy = localXY(e), pane = inPane(xy);
+  const hit = pane && !D.tool ? hitTest(xy.x, xy.y) : null;
+  if (hit) { D.selected = hit.d; renderProps(); requestDraw(); showCM(e, drawingMenu(hit.d)); }
+  else showCM(e, chartMenu(pane ? fromPx(xy.x, xy.y, false, false) : null));
+}, true);
+
+// ───────── settings dialog (TradingView-style): Стиль / Уровни / Текст / Координаты ─────────
+const dlg = document.createElement('div'); dlg.className = 'dset-ov hidden'; document.body.appendChild(dlg);
+let DS = null; // { d, before, tab }
+const FIBLIKE = new Set(['fib_retr', 'fib_ext']);
+function openSettings(d, tab) {
+  if (!d) return;
+  hideCM(); D.selected = d; renderProps(); requestDraw();
+  DS = { d, before: serialize(), tab: tab || 'style' };
+  renderSettings(); dlg.classList.remove('hidden');
+}
+function closeSettings(apply) {
+  if (!DS) return;
+  const { d, before } = DS; DS = null; dlg.classList.add('hidden');
+  if (apply) { if (serialize() !== before) { D.undo.push(before); if (D.undo.length > 100) D.undo.shift(); D.redo = []; save(); } }
+  else { D.items = JSON.parse(before); D.selected = D.items.find(x => x.id === d.id) || null; save(); }
+  renderProps(); requestDraw();
+}
+const isoUTC = t => { try { return new Date(t * 1000).toISOString().slice(0, 16); } catch { return ''; } };
+function chk(k, label, def = false) { const v = DS.d.style[k]; return `<label class="dset-chk"><input type="checkbox" data-k="${k}" data-t="bool" data-def="${def ? 1 : 0}" ${(v ?? def) ? 'checked' : ''}> ${label}</label>`; }
+function renderSettings() {
+  const { d, tab } = DS, s = d.style, t = TOOL[d.type];
+  const tabs = [['style', 'Стиль'], ...(LEVELED.has(d.type) ? [['levels', 'Уровни']] : []), ...(TEXTUAL.has(d.type) ? [['text', 'Текст']] : []), ['coords', 'Координаты']];
+  let body = '';
+  if (tab === 'style') {
+    body += `<div class="dset-row"><span>Линия</span><input type="color" data-k="color" data-t="color" value="${(s.color || '#2962ff').slice(0, 7)}">
+      <select data-k="width" data-t="num">${[1, 2, 3, 4].map(v => `<option ${v === s.width ? 'selected' : ''}>${v}</option>`).join('')}</select>
+      <select data-k="dash" data-t="str"><option value="solid" ${s.dash === 'solid' ? 'selected' : ''}>Сплошная</option><option value="dashed" ${s.dash === 'dashed' ? 'selected' : ''}>Пунктир</option><option value="dotted" ${s.dash === 'dotted' ? 'selected' : ''}>Точки</option></select></div>`;
+    if (FILLABLE.has(d.type)) {
+      body += `<div class="dset-row"><span>Фон</span>${chk('fill', 'заливка', true)}`;
+      if (FIBLIKE.has(d.type)) body += `<input type="range" min="0" max="40" step="1" data-k="fillAlpha" data-t="pct" value="${Math.round((s.fillAlpha ?? 0.08) * 100)}" title="Прозрачность фона"><span class="dset-val" data-show="fillAlpha">${Math.round((s.fillAlpha ?? 0.08) * 100)}%</span>`;
+      body += '</div>';
+    }
+    if (FIBLIKE.has(d.type)) {
+      body += `<div class="dset-row"><span>Продлить</span>${chk('extendLeft', 'влево')}${chk('extend', 'вправо')}</div>`;
+      body += `<div class="dset-row"><span>Метки</span>${chk('showLevels', 'уровни', true)}${chk('showPrices', 'цены', true)}${chk('pct', 'в процентах')}</div>
+        <div class="dset-row"><span>Сторона меток</span><select data-k="labelPos" data-t="str"><option value="left" ${(s.labelPos || (d.type === 'fib_ext' ? 'right' : 'left')) === 'left' ? 'selected' : ''}>слева</option><option value="right" ${(s.labelPos || (d.type === 'fib_ext' ? 'right' : 'left')) === 'right' ? 'selected' : ''}>справа</option></select></div>`;
+      body += `<div class="dset-row"><span>Направление</span>${chk('reverse', 'обратить (уровни от другой точки)')}</div>`;
+    } else if (LEVELED.has(d.type)) {
+      body += `<div class="dset-row"><span>Метки</span>${chk('showLevels', 'показывать уровни', true)}${d.type !== 'fib_time' ? chk('pct', 'в процентах') : ''}</div>`;
+    }
+    if (d.type === 'rect') body += `<div class="dset-row"><span>Продлить</span>${chk('extend', 'вправо')}</div>`;
+  } else if (tab === 'levels') {
+    const L = Array.isArray(s.levels) && s.levels.length ? s.levels : defLevels(d.type);
+    body += `<div class="dset-lv">${L.map((l, i) => `<div class="dset-li"><input type="checkbox" data-li="${i}" data-lf="on" ${l.on !== false ? 'checked' : ''}>
+      <input type="number" step="any" data-li="${i}" data-lf="v" value="${escH(l.v)}"><input type="color" data-li="${i}" data-lf="c" value="${(l.c || '#787b86').slice(0, 7)}"><button class="dset-x" data-ldel="${i}" title="Убрать уровень">✕</button></div>`).join('')}</div>
+      <div class="dset-row dset-lvact"><button class="dset-btn" data-lact="add">+ Уровень</button><button class="dset-btn" data-lact="reset">Сбросить уровни</button>
+      <span class="dset-sp"></span><span class="muted">Все одним цветом</span><input type="color" data-lact="all" value="${(s.color || '#2962ff').slice(0, 7)}"></div>`;
+  } else if (tab === 'text') {
+    body += `<div class="dset-row dset-col"><span>Текст</span><textarea data-k="text" data-t="str" rows="3">${escH(s.text || '')}</textarea></div>
+      <div class="dset-row"><span>Размер</span><select data-k="fontSize" data-t="num">${[10, 12, 14, 18, 24, 32].map(v => `<option ${v === (s.fontSize || 14) ? 'selected' : ''}>${v}</option>`).join('')}</select></div>`;
+  } else if (tab === 'coords') {
+    body += d.pts.map((q, i) => `<div class="dset-row"><span>Точка ${i + 1}</span><input type="number" step="any" data-pi="${i}" data-pf="p" value="${+q.p}" title="Цена"><input type="datetime-local" data-pi="${i}" data-pf="t" value="${isoUTC(q.t)}" title="Время (UTC)"></div>`).join('')
+      + `<div class="muted dset-note">Время в UTC. Цена и время меняются сразу на графике.</div>`;
+  }
+  dlg.innerHTML = `<div class="dset" role="dialog"><div class="dset-h"><b>${escH(t ? t.name : d.type)}</b><button class="dset-x" data-close="1" title="Закрыть (Esc)">✕</button></div>
+    <div class="dset-tabs">${tabs.map(([id, n]) => `<button data-tab="${id}" class="${id === tab ? 'on' : ''}">${n}</button>`).join('')}</div>
+    <div class="dset-b">${body}</div>
+    <div class="dset-f"><div class="dset-tpl"><button class="dset-btn" data-tpl="save" title="Новые рисунки этого типа будут с этим стилем">★ Сделать по умолчанию</button>${styleDefaults(d.type) ? '<button class="dset-btn" data-tpl="reset" title="Вернуть заводской стиль для новых рисунков">Сбросить шаблон</button>' : ''}</div>
+      <span class="dset-sp"></span><button class="dset-btn" data-cancel="1">Отмена</button><button class="dset-btn pri" data-ok="1">ОК</button></div></div>`;
+  bindSettings();
+}
+function bindSettings() {
+  const { d } = DS, s = d.style, q = sel => dlg.querySelectorAll(sel);
+  const live = () => requestDraw();
+  q('[data-tab]').forEach(b => { b.onclick = () => { DS.tab = b.dataset.tab; renderSettings(); }; });
+  q('[data-close],[data-cancel]').forEach(b => { b.onclick = () => closeSettings(false); });
+  q('[data-ok]').forEach(b => { b.onclick = () => closeSettings(true); });
+  q('[data-k]').forEach(el => {
+    const k = el.dataset.k, tp = el.dataset.t;
+    const apply = () => {
+      if (tp === 'bool') s[k] = el.checked;
+      else if (tp === 'num') s[k] = +el.value;
+      else if (tp === 'pct') { s[k] = +el.value / 100; const v = dlg.querySelector(`[data-show="${k}"]`); if (v) v.textContent = el.value + '%'; }
+      else s[k] = el.value;
+      live();
+    };
+    el.addEventListener(tp === 'bool' || el.tagName === 'SELECT' ? 'change' : 'input', apply);
+  });
+  const ensureLevels = () => { if (!Array.isArray(s.levels) || !s.levels.length) s.levels = defLevels(d.type); return s.levels; };
+  q('[data-li]').forEach(el => {
+    const i = +el.dataset.li, f = el.dataset.lf;
+    el.addEventListener(f === 'on' ? 'change' : 'input', () => { const L = ensureLevels(); L[i][f] = f === 'on' ? el.checked : f === 'v' ? (el.value === '' ? '' : +el.value) : el.value; live(); });
+  });
+  q('[data-ldel]').forEach(b => { b.onclick = () => { ensureLevels().splice(+b.dataset.ldel, 1); live(); renderSettings(); }; });
+  q('[data-lact]').forEach(el => {
+    const a = el.dataset.lact;
+    if (a === 'add') el.onclick = () => { const L = ensureLevels(); const mx = L.reduce((m, l) => Math.max(m, +l.v || 0), 0); L.push({ v: +(mx + 0.5).toFixed(3), c: s.color || '#2962FF', on: true }); live(); renderSettings(); const inp = dlg.querySelectorAll('.dset-li input[type=number]'); if (inp.length) { inp[inp.length - 1].focus(); inp[inp.length - 1].select(); } };
+    if (a === 'reset') el.onclick = () => { delete s.levels; live(); renderSettings(); };
+    if (a === 'all') el.addEventListener('input', () => { ensureLevels().forEach(l => { l.c = el.value; }); q('[data-lf="c"]').forEach(c => { c.value = el.value; }); live(); });
+  });
+  q('[data-pi]').forEach(el => {
+    const i = +el.dataset.pi, f = el.dataset.pf;
+    el.addEventListener('change', () => {
+      if (f === 'p') { const v = parseFloat(el.value); if (Number.isFinite(v)) d.pts[i].p = v; }
+      else { const ms = Date.parse(el.value + ':00Z'); if (Number.isFinite(ms)) d.pts[i].t = Math.round(ms / 1000); }
+      live();
+    });
+  });
+  q('[data-tpl]').forEach(b => { b.onclick = () => {
+    if (b.dataset.tpl === 'save') { saveStyleDefault(d); toast(`Стиль сохранён: новые «${TOOL[d.type].name}» будут такими`); }
+    else { resetStyleDefault(d.type); toast('Шаблон сброшен: новые рисунки — со стандартным стилем'); }
+    renderSettings();
+  }; });
+}
+dlg.addEventListener('mousedown', e => { if (e.target === dlg) closeSettings(true); });
+document.addEventListener('keydown', e => {
+  if (!DS) return;
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeSettings(false); }
+  else if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); e.stopPropagation(); closeSettings(true); }
+}, true);
 
 // ───────── public API (for Quant / future features) ─────────
 window.QLDraw = {
@@ -699,6 +933,8 @@ window.QLDraw = {
   removeAgent: () => { if (!D.items.some(d => d.style && d.style.agent)) return; snapshot(); D.items = D.items.filter(d => !(d.style && d.style.agent)); if (D.selected && !D.items.includes(D.selected)) D.selected = null; save(); renderProps(); requestDraw(); },
   tools: () => TOOLS.map(({ id, name, group, n }) => ({ id, name, group, points: n })),
   redraw: requestDraw,
+  openSettings: id => openSettings(D.items.find(x => x.id === id)),
+  resetView,
 };
 
 renderBar();
