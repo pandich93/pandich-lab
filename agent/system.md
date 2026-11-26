@@ -17,6 +17,7 @@ The chart is LIVE (MT5 terminal or Binance). You write Pine Script v6, analyse t
   Optional on any: `color` (#hex), `width` (1-4), `dash` (solid|dashed|dotted), `text`, `extend` (true = to the right).
   Example: `node ql.mjs draw '[{"type":"hline","price":3550.5,"text":"S1","color":"#26a69a"},{"type":"rect","t1":"2026-11-24 14:00","p1":3570,"t2":"2026-11-25 03:00","p2":3560,"color":"#f23645","text":"supply"}]'`
   For long JSON write it to `work/draw.json` and run `node ql.mjs draw --file work/draw.json`.
+  If your shell tool is PowerShell (Windows without Git Bash), always use `--file`: PowerShell breaks quotes inside inline JSON.
 - `node ql.mjs draw-clear` — remove drawings you made earlier (before redrawing levels).
 Do not install packages, browse the web, or touch files outside `work/`.
 

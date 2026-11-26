@@ -63,7 +63,8 @@
     'claude.login': { label: 'Войти в Claude' },
     'claude.install': { label: 'Установить Claude Code', busy: 'Устанавливаю… (1–3 мин)', primary: true },
     'mt5.reconnect': { label: 'Переподключить', busy: 'Подключаюсь…' },
-    'mt5.install': { label: 'Установить модуль', busy: 'Устанавливаю… (до 2 мин)', primary: true },
+    'mt5.install': { label: 'Установить модуль', busy: 'Устанавливаю… (до 5 мин)', primary: true },
+    'git.install': { label: 'Установить Git Bash', busy: 'Скачиваю и ставлю… (1–3 мин)', primary: true },
     'tg.setup': { label: 'Настроить' },
     'tg.test': { label: 'Тестовое сообщение', busy: 'Отправляю…' },
   };
@@ -90,6 +91,9 @@
       } else if (id === 'mt5.install') {
         const r = await req('/api/mt5/install', {}); ST.health = r.health;
         ST.notes.mt5 = r.ok ? { ok: true, text: 'Модуль MetaTrader5 установлен.' } : { ok: false, text: 'Не удалось установить модуль.', out: r.out };
+      } else if (id === 'git.install') {
+        const r = await req('/api/git/install', {}); ST.health = r.health;
+        ST.notes.claude = r.ok ? { ok: true, text: 'Git Bash установлен — Panda сможет запускать код на графике.' } : { ok: false, text: 'Не удалось установить Git Bash.', out: r.out };
       } else if (id === 'tg.setup') {
         close(); window.QLPanels && window.QLPanels.show('watch', true);
       } else if (id === 'tg.test') {

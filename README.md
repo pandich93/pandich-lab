@@ -135,7 +135,7 @@ Panda работает через твой собственный Claude:
 - **Windows 10/11 (x64):** `PandichLab-x.y.z-win-x64.exe`. Двойной клик, и приложение установится без прав администратора.
 - **macOS (Apple Silicon и Intel):** `PandichLab-x.y.z-mac-universal.dmg`. Перетащи приложение в «Программы».
 
-При первом запуске откроется мастер: он поставит Claude Code и поможет войти в подписку; на Windows по желанию подключит MetaTrader 5. Приложение обновляется само.
+При первом запуске откроется мастер с кнопкой **«Установить всё»**. Она сама скачает с официальных сайтов и поставит всё нужное, без прав администратора: на Windows — Claude Code, Git Bash и, по желанию, Python 3.13 с модулем MetaTrader5; на macOS — Claude Code. Затем откроется окно входа в Claude: войдите через подписку в браузере, мастер сам заметит, что вход выполнен. Приложение обновляется само.
 
 > Установщики пока **не подписаны**:
 > - **Windows** покажет «Windows защитила ваш компьютер» → «Подробнее» → «Выполнить в любом случае».
@@ -248,7 +248,7 @@ Installers are in [Releases](../../releases):
 - **Windows 10/11 (x64):** `PandichLab-x.y.z-win-x64.exe`, a one-click install without admin rights.
 - **macOS (Apple Silicon & Intel):** `PandichLab-x.y.z-mac-universal.dmg`.
 
-On first launch a setup wizard installs Claude Code and helps you sign in; on Windows it can also connect MetaTrader 5. The app updates itself.
+On first launch the setup wizard offers one **«Установить всё»** (install everything) button. It downloads everything from the official sites and installs it without admin rights: Claude Code, Git Bash and, optionally, Python 3.13 with the MetaTrader5 module on Windows; Claude Code on macOS. Then it opens the Claude sign-in and notices when you are signed in. The app updates itself.
 
 > The installers are **not code-signed** yet:
 > - **Windows SmartScreen:** "More info" → "Run anyway".
@@ -323,7 +323,7 @@ Imkoniyatlar:
 2. Ishga tushiring.
    - **Windows** ogohlantirsa: **Подробнее / More info** → **Выполнить в любом случае / Run anyway**.
    - **macOS** bloklasa: System Settings → Privacy & Security → **Open Anyway**.
-3. Birinchi ishga tushirishda sozlash ustasi Claude Code'ni o'rnatadi va akkauntingizga kirishga yordam beradi.
+3. Birinchi ishga tushirishda **«Установить всё»** tugmasini bosing: dastur kerakli hamma narsani o'zi o'rnatadi (Windows: Claude Code, Git Bash, xohlasangiz Python + MetaTrader5; Mac: Claude Code). Keyin brauzerda Claude akkauntingizga kiring — tamom.
 
 Yoki AI-agentingiz bo'lsa, [yuqoridagi promptni](#-install-with-an-ai-agent) unga nusxalang — o'zi o'rnatib beradi.
 

@@ -38,9 +38,23 @@ if (isWin) app.setAppUserModelId(APP_ID); // Windows notifications need it
 function extraPath() {
   const h = os.homedir();
   const dirs = [SHIM_DIR, path.join(h, '.local', 'bin')];
-  if (isWin) dirs.push(path.join(process.env.APPDATA || path.join(h, 'AppData', 'Roaming'), 'npm'), path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WindowsApps'));
+  if (isWin) {
+    dirs.push(path.join(process.env.APPDATA || path.join(h, 'AppData', 'Roaming'), 'npm'));
+    for (const d of pythonDirs()) dirs.push(d, path.join(d, 'Scripts')); // per-user Python (also one we just installed)
+    dirs.push(path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WindowsApps'));
+  }
   else dirs.push('/opt/homebrew/bin', '/usr/local/bin', path.join(h, '.npm-global', 'bin'), '/usr/bin', '/bin');
   return dirs;
+}
+// %LOCALAPPDATA%\Programs\Python\Python3xx — where the per-user python.org installer puts Python (newest first)
+function pythonDirs() {
+  if (!isWin) return [];
+  const root = path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'Programs', 'Python');
+  try {
+    const pref = n => { const m = Number(n.slice(7)); const i = [313, 314, 312, 311, 310].indexOf(m); return i >= 0 ? i : 100 - m / 1000; };
+    return fs.readdirSync(root).filter(n => /^Python3\d+$/.test(n)).sort((a, b) => pref(a) - pref(b))
+      .map(n => path.join(root, n)).filter(d => fs.existsSync(path.join(d, 'python.exe')));
+  } catch { return []; }
 }
 function envPath() { const sep = isWin ? ';' : ':'; return [...extraPath(), ...(process.env.PATH || process.env.Path || '').split(sep)].filter(Boolean).join(sep); }
 
@@ -161,7 +175,7 @@ function showMain() {
 function openSetup() {
   if (S.setupWin) { S.setupWin.show(); S.setupWin.focus(); return; }
   S.setupWin = new BrowserWindow({
-    width: 720, height: 640, resizable: false, backgroundColor: '#131416', title: 'Pandich Lab — настройка', icon: ICON, autoHideMenuBar: true,
+    width: 760, height: 720, resizable: true, backgroundColor: '#131416', title: 'Pandich Lab — настройка', icon: ICON, autoHideMenuBar: true,
     webPreferences: { contextIsolation: true, sandbox: false, preload: path.join(__dirname, 'preload.js') },
   });
   S.setupWin.loadFile(path.join(__dirname, 'setup.html'));
@@ -223,19 +237,33 @@ async function checkUpdates(manual, silent) {
 function note(title, body) { if (Notification.isSupported()) new Notification({ title, body }).show(); }
 
 // ───────── setup wizard IPC ─────────
+function gitBash() {
+  if (!isWin) return '';
+  const pf = [process.env.ProgramFiles, process.env['ProgramFiles(x86)'], process.env.ProgramW6432].filter(Boolean);
+  const c = [...pf.map(d => path.join(d, 'Git', 'bin', 'bash.exe')), path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Git', 'bin', 'bash.exe'), path.join(HOME, 'tools', 'git', 'bin', 'bash.exe')];
+  return c.find(f => fs.existsSync(f)) || '';
+}
 async function status() {
   const claude = findClaude();
   let version = '';
   if (claude) { const r = await run(claude, ['--version'], { timeout: 20000, shell: isWin && /\.(cmd|bat)$/i.test(claude) }); if (r.code === 0) version = r.out.trim().split('\n')[0]; }
   const py = isWin ? await findPython() : null;
-  return { platform: process.platform, claude: { path: claude, version }, python: py, home: HOME };
+  return { platform: process.platform, claude: { path: claude, version }, python: py, git: gitBash(), home: HOME };
 }
 async function findPython() {
-  for (const [cmd, args] of [['py', ['-3']], ['python', []], ['python3', []]]) {
-    const r = await run(cmd, [...args, '-c', 'import sys,importlib.util as u;print(sys.version.split()[0]);print(bool(u.find_spec("MetaTrader5")))'], { timeout: 20000 });
-    if (r.code === 0) { const [v, mt5] = r.out.trim().split(/\r?\n/); return { cmd: [cmd, ...args].join(' '), version: v, mt5: mt5 === 'True' }; }
+  // first 64-bit Python 3.8–3.14 (MetaTrader5 ships win_amd64 wheels only); report an unsuitable one too
+  const cands = [...pythonDirs().map(d => [path.join(d, 'python.exe'), []]), ['py', ['-3']], ['python', []], ['python3', []]];
+  let unsuitable = null;
+  for (const [bin, args] of cands) {
+    const r = await run(bin, [...args, '-c', 'import sys,struct,importlib.util as u;print(sys.version.split()[0]);print(bool(u.find_spec("MetaTrader5")));print(struct.calcsize("P")*8)'], { timeout: 20000 });
+    if (r.code !== 0) continue;
+    const [v, mt5, bits] = r.out.trim().split(/\r?\n/).map(x => x.trim());
+    const minor = Number((v || '').split('.')[1]);
+    const py = { cmd: [bin.includes(' ') ? `"${bin}"` : bin, ...args].join(' '), bin, args, version: v, mt5: mt5 === 'True', bits: Number(bits) };
+    if (py.bits === 64 && minor >= 8 && minor <= 14) return py;
+    unsuitable = unsuitable || { ...py, unsuitable: py.bits !== 64 ? '32-битный' : `версия ${v} не поддерживается модулем MetaTrader5` };
   }
-  return { cmd: '', version: '', mt5: false };
+  return unsuitable ? { cmd: '', version: '', mt5: false, found: unsuitable } : { cmd: '', version: '', mt5: false };
 }
 ipcMain.handle('setup:status', () => status());
 
@@ -275,11 +303,53 @@ ipcMain.handle('setup:loginClaude', async () => {
 });
 ipcMain.handle('setup:installMT5', async e => {
   const send = l => { try { e.sender.send('setup:log', l); } catch { /* closed */ } };
-  const py = await findPython(); if (!py.cmd) return { ok: false, error: 'Python 3 не найден', status: await status() };
-  const [cmd, ...args] = py.cmd.split(' ');
-  const r = await run(cmd, [...args, '-m', 'pip', 'install', '--upgrade', 'MetaTrader5'], { onLine: send });
+  const py = await findPython(); if (!py.cmd) return { ok: false, error: 'Подходящий Python 3 не найден', status: await status() };
+  const r = await run(py.bin, [...py.args, '-m', 'pip', 'install', '--upgrade', 'MetaTrader5'], { onLine: send });
   return { ok: r.code === 0, status: await status() };
 });
+// Python for MT5 (Windows): official python.org installer, per-user, silent, adds itself to PATH. No admin rights.
+const PY_URL = 'https://www.python.org/ftp/python/3.13.16/python-3.13.16-amd64.exe'; // MetaTrader5 wheels: cp313/cp314 win_amd64
+async function installPython(send) {
+  if (!isWin) return { ok: false, error: 'Python для MT5 нужен только на Windows' };
+  const f = path.join(os.tmpdir(), path.basename(PY_URL));
+  try {
+    send(`Скачиваю Python 3.13 с python.org…`);
+    const r = await fetch(PY_URL, { signal: AbortSignal.timeout(600000) });
+    if (!r.ok || !r.body) throw new Error(`HTTP ${r.status}`);
+    const total = Number(r.headers.get('content-length')) || 0;
+    const out = fs.createWriteStream(f); let got = 0, step = 0;
+    for await (const chunk of r.body) {
+      got += chunk.length; out.write(chunk);
+      const pct = total ? Math.floor(got / total * 100) : 0;
+      if (pct >= step) { send(`  ${pct}% (${(got / 1048576).toFixed(1)} МБ)`); step = pct + 20; }
+    }
+    await new Promise((res, rej) => out.end(e => e ? rej(e) : res()));
+    if (fs.statSync(f).size < 10e6) throw new Error('файл скачался не полностью');
+  } catch (e) { return { ok: false, error: `Не удалось скачать Python: ${e.message}` }; }
+  send('Устанавливаю Python (1–2 мин, без окон)…');
+  const r = await run(f, ['/quiet', 'InstallAllUsers=0', 'PrependPath=1', 'Include_launcher=1', 'InstallLauncherAllUsers=0', 'Include_test=0', 'Include_doc=0'], { timeout: 600000 });
+  try { fs.unlinkSync(f); } catch { /* temp */ }
+  if (r.code !== 0) return { ok: false, error: `Установщик Python завершился с кодом ${r.code}${r.code === 1602 ? ' (отменено)' : ''}` };
+  const py = await findPython();
+  return py.cmd ? { ok: true, python: py } : { ok: false, error: 'Python установлен, но не найден — перезапустите Pandich Lab' };
+}
+ipcMain.handle('setup:installPython', async e => {
+  const send = l => { try { e.sender.send('setup:log', l); } catch { /* closed */ } };
+  const r = await installPython(send);
+  return { ...r, status: await status() };
+});
+// Steps that live in the server (shared with the Settings panel): Claude test, Git Bash install
+function serverPost(p, timeout) {
+  return new Promise(res => {
+    const q = http.request({ host: '127.0.0.1', port: S.port, path: p, method: 'POST', timeout, headers: { 'content-type': 'application/json' } }, x => {
+      let b = ''; x.on('data', c => { b += c; }); x.on('end', () => { try { res(JSON.parse(b)); } catch { res({ ok: false, error: 'Сервер не ответил' }); } });
+    });
+    q.on('error', e => res({ ok: false, error: e.message })); q.on('timeout', () => { q.destroy(); res({ ok: false, error: 'таймаут' }); });
+    q.end('{}');
+  });
+}
+ipcMain.handle('setup:testClaude', async () => { const r = await serverPost('/api/health/claude-test', 130000); return r.test || { ok: false, summary: r.error || 'Сервер не ответил' }; });
+ipcMain.handle('setup:installGit', async () => { const r = await serverPost('/api/git/install', 900000); return { ok: !!r.ok, error: r.ok ? '' : (r.out || r.error), out: r.out, status: await status() }; });
 ipcMain.handle('setup:setClaudePath', async (_e, p) => { settings.claudeBin = p || ''; saveSettings(); return status(); });
 ipcMain.handle('setup:openUrl', (_e, url) => { if (/^https:\/\//.test(url)) shell.openExternal(url); });
 ipcMain.handle('setup:finish', async (_e, opts = {}) => {

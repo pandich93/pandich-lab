@@ -146,7 +146,15 @@ const MT5 = {
 };
 function pythonCandidates() {
   if (CFG.pythonCmd) { const parts = CFG.pythonCmd.match(/"[^"]+"|\S+/g).map(s => s.replace(/^"|"$/g, '')); return [[parts[0], parts.slice(1)]]; }
-  return process.platform === 'win32' ? [['py', ['-3']], ['python', []]] : [['python3', []], ['python', []]];
+  if (process.platform !== 'win32') return [['python3', []], ['python', []]];
+  return [...winPythonDirs().map(d => [path.join(d, 'python.exe'), []]), ['py', ['-3']], ['python', []]];
+}
+// %LOCALAPPDATA%\Programs\Python\Python3xx (per-user python.org installer); versions with MetaTrader5 wheels first
+function winPythonDirs() {
+  const root = path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'Programs', 'Python');
+  const pref = n => { const m = Number(n.slice(7)); const i = [313, 314, 312, 311, 310].indexOf(m); return i >= 0 ? i : 100 - m / 1000; };
+  try { return fs.readdirSync(root).filter(n => /^Python3\d+$/.test(n)).sort((a, b) => pref(a) - pref(b)).map(n => path.join(root, n)).filter(d => fs.existsSync(path.join(d, 'python.exe'))); }
+  catch { return []; }
 }
 function mt5Call(cmd, args = {}, timeoutMs = 20000) {
   return new Promise((resolve, reject) => {
@@ -963,13 +971,13 @@ async function agentTurnClaudeCode(body, emit) {
     '--model', model,
     '--append-system-prompt-file', 'system.md',
     '--permission-mode', 'dontAsk',
-    '--allowedTools', 'Read,Write,Edit,Bash(node ql.mjs *)',
+    '--allowedTools', process.platform === 'win32' ? 'Read,Write,Edit,Bash(node ql.mjs *),PowerShell(node ql.mjs *)' : 'Read,Write,Edit,Bash(node ql.mjs *)',
   ];
   if (st.ccSession) args.push('--resume', st.ccSession);
 
   emit({ type: 'status', text: 'Думаю…' });
   await new Promise((resolve, reject) => {
-    const env = { ...process.env, QL_PORT: String(CFG.port), QL_SID: sid };
+    const env = withGitBash({ ...process.env, QL_PORT: String(CFG.port), QL_SID: sid });
     delete env.ANTHROPIC_API_KEY; // force subscription (OAuth) login, never bill the API
     // Windows: claude is a .cmd shim → run it through cmd.exe explicitly (no shell:true → no DEP0190 warning)
     const isWin = process.platform === 'win32';
@@ -1170,10 +1178,22 @@ const CLAUDE_INSTALL = IS_WIN
   ? [{ label: 'PowerShell', text: 'irm https://claude.ai/install.ps1 | iex' }]
   : [{ label: 'Терминал', text: 'curl -fsSL https://claude.ai/install.sh | bash' }];
 
+// Windows: Claude Code runs Panda's `node ql.mjs …` through Git Bash. Without it Claude Code falls back to its PowerShell tool,
+// whose allow rules are unreliable in headless mode → we find Git Bash (or our own PortableGit) and point Claude Code at it.
+const GIT_DIR = path.join(HOME, 'tools', 'git');
+function gitBashPath() {
+  if (!IS_WIN) return '';
+  if (process.env.CLAUDE_CODE_GIT_BASH_PATH && fs.existsSync(process.env.CLAUDE_CODE_GIT_BASH_PATH)) return process.env.CLAUDE_CODE_GIT_BASH_PATH;
+  const pf = [process.env.ProgramFiles, process.env['ProgramFiles(x86)'], process.env.ProgramW6432].filter(Boolean);
+  const c = [...pf.map(d => path.join(d, 'Git', 'bin', 'bash.exe')), path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Git', 'bin', 'bash.exe'), path.join(GIT_DIR, 'bin', 'bash.exe')];
+  return c.find(f => { try { return fs.statSync(f).isFile(); } catch { return false; } }) || '';
+}
+function withGitBash(env) { const b = gitBashPath(); if (b && !env.CLAUDE_CODE_GIT_BASH_PATH) env.CLAUDE_CODE_GIT_BASH_PATH = b; return env; }
+
 // Run the Claude Code CLI the same way the chat does (Windows: through cmd.exe because of the .cmd shim)
 function runClaudeCli(args, { timeout = 30000, cwd } = {}) {
   return new Promise(resolve => {
-    const env = { ...process.env }; delete env.ANTHROPIC_API_KEY;
+    const env = withGitBash({ ...process.env }); delete env.ANTHROPIC_API_KEY;
     const cmd = IS_WIN ? (process.env.ComSpec || 'cmd.exe') : CFG.claudeBin;
     const cmdArgs = IS_WIN ? ['/d', '/s', '/c', `"${[quoteArg(CFG.claudeBin), ...args.map(quoteArg)].join(' ')}"`] : args;
     let out = '', err = '', done = false, child = null, timer = null;
@@ -1281,9 +1301,9 @@ function mt5Item() {
     return Object.assign(it, { state: 'warn', summary: 'Не установлен модуль MetaTrader5 для Python', hint: 'Установите модуль командой ниже (или кнопкой «Установить модуль»), затем нажмите «Переподключить».' });
   }
   if (/python not found|ENOENT|was not found|Microsoft Store|9009|not recognized/i.test(e)) {
-    it.cmds = [{ label: 'После установки Python', text: 'py -3 -m pip install MetaTrader5' }];
-    it.link = { label: 'Скачать Python', url: 'https://www.python.org/downloads/windows/' };
-    return Object.assign(it, { state: 'warn', summary: 'Не найден Python 3', hint: 'Для MT5 нужен Python 3. При установке отметьте галочку «Add python.exe to PATH», затем установите модуль MetaTrader5 и нажмите «Переподключить». Без MT5 работают графики Binance.' });
+    it.actions.unshift('mt5.install');
+    it.link = { label: 'Скачать Python вручную', url: 'https://www.python.org/downloads/windows/' };
+    return Object.assign(it, { state: 'warn', summary: 'Не найден Python 3', hint: 'Нажмите «Установить модуль» — программа сама скачает Python 3.13 с python.org, установит его (без прав администратора) и подключит MT5. Без MT5 работают графики Binance.' });
   }
   if (/initialize failed|IPC|terminal|Authorization/i.test(e)) return Object.assign(it, { state: 'warn', summary: 'Терминал MT5 не отвечает', hint: 'Запустите MetaTrader 5 и войдите в торговый счёт (внизу справа должен быть пинг, а не «Нет соединения»). Затем нажмите «Переподключить». Если терминалов несколько — укажите путь к нужному в config.json (mt5Path).' });
   return Object.assign(it, { state: 'warn', summary: 'MT5 недоступен', hint: 'Проверьте, что терминал запущен и залогинен, затем нажмите «Переподключить».' });
@@ -1311,6 +1331,14 @@ async function health({ force = false } = {}) {
     else Object.assign(cl, { state: 'idle', summary: 'Установлен, вход не проверен', hint: 'Нажмите «Проверить Panda» — будет отправлен один короткий запрос через вашу подписку.' });
     if (test) cl.details.push(['Проверка', `${test.ok ? 'успешно' : 'ошибка'} · ${ago(test.t)}${test.ok ? ` · ${(test.ms / 1000).toFixed(1)} с` : ''}`]);
     cl.actions.push('claude.test', 'claude.login');
+    if (IS_WIN) {
+      const gb = gitBashPath();
+      cl.details.push(['Оболочка', gb ? `Git Bash · ${maskPII(gb)}` : 'нет Git Bash (только PowerShell)']);
+      if (!gb) {
+        cl.actions.push('git.install');
+        if (cl.state === 'ok' || cl.state === 'idle') Object.assign(cl, { state: 'warn', summary: cl.summary + ' · нет Git Bash', hint: 'Без Git Bash Panda может не суметь запустить код на графике. Нажмите «Установить Git Bash» — он поставится в папку программы, без прав администратора.' });
+      }
+    }
   }
   if (CFG.backend !== 'api' && !net.anthropic.ok && cl.state !== 'err') Object.assign(cl, { state: 'warn', summary: cl.summary + ' · нет связи с Anthropic', hint: 'Серверы Claude не отвечают: проверьте интернет, фаервол или VPN.' });
   items.push(cl);
@@ -1406,11 +1434,64 @@ async function installClaude() {
   HC.ver = null; const v = await claudeVersion(true);
   return { ok: v.ok, out: maskPII(r.out).slice(-1500) };
 }
+async function download(url, file, minBytes) {
+  const r = await fetch(url, { headers: { 'user-agent': 'pandich-lab' }, signal: AbortSignal.timeout(900000) });
+  if (!r.ok || !r.body) throw new Error(`HTTP ${r.status}`);
+  const out = fs.createWriteStream(file);
+  for await (const chunk of r.body) if (!out.write(chunk)) await new Promise(res => out.once('drain', res));
+  await new Promise((res, rej) => out.end(e => e ? rej(e) : res()));
+  if (fs.statSync(file).size < minBytes) throw new Error('файл скачался не полностью');
+}
+// Git Bash for Claude Code: official PortableGit (git-for-windows releases), unpacked into our folder — no admin, no installer UI
+async function installGit() {
+  if (!IS_WIN) return { ok: true, out: 'не нужен на этой системе' };
+  if (gitBashPath()) return { ok: true, out: `уже есть: ${maskPII(gitBashPath())}` };
+  const tmp = path.join(os.tmpdir(), `PortableGit-${Date.now()}.7z.exe`);
+  try {
+    const rel = await (await fetch('https://api.github.com/repos/git-for-windows/git/releases/latest', { headers: { 'user-agent': 'pandich-lab', accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(20000) })).json();
+    const asset = (rel.assets || []).find(a => /^PortableGit-[\d.]+(-\d+)?-64-bit\.7z\.exe$/.test(a.name));
+    if (!asset) throw new Error('PortableGit не найден в последнем релизе git-for-windows');
+    console.log(`git: downloading ${asset.name}`);
+    await download(asset.browser_download_url, tmp, 20e6);
+    fs.mkdirSync(GIT_DIR, { recursive: true });
+    const r = await runCmd(tmp, ['-y', `-o${GIT_DIR}`], 600000); // 7-Zip self-extractor: silent, into GIT_DIR
+    if (!fs.existsSync(path.join(GIT_DIR, 'bin', 'bash.exe'))) throw new Error(`распаковка не удалась (код ${r.code})`);
+    console.log('git: PortableGit ready');
+    return { ok: true, out: `Git Bash установлен: ${maskPII(path.join(GIT_DIR, 'bin', 'bash.exe'))}` };
+  } catch (e) { console.log(`git install failed: ${e.message}`); return { ok: false, out: e.message }; }
+  finally { try { fs.unlinkSync(tmp); } catch { /* temp */ } }
+}
+// Python for MT5: official python.org installer, per-user, silent, adds itself to PATH. MetaTrader5 has cp313/cp314 win_amd64 wheels.
+const PY_URL = 'https://www.python.org/ftp/python/3.13.16/python-3.13.16-amd64.exe';
+async function installPython() {
+  if (!IS_WIN) return { ok: false, out: 'Python для MT5 нужен только на Windows' };
+  const tmp = path.join(os.tmpdir(), path.basename(PY_URL));
+  try {
+    console.log('python: downloading 3.13');
+    await download(PY_URL, tmp, 10e6);
+    const r = await runCmd(tmp, ['/quiet', 'InstallAllUsers=0', 'PrependPath=1', 'Include_launcher=1', 'InstallLauncherAllUsers=0', 'Include_test=0', 'Include_doc=0'], 600000);
+    if (r.code !== 0) throw new Error(`установщик завершился с кодом ${r.code}${r.code === 1602 ? ' (отменено)' : ''}`);
+    if (!winPythonDirs().length) throw new Error('Python установлен, но не найден');
+    console.log(`python: installed ${winPythonDirs()[0]}`);
+    return { ok: true, out: `Python установлен: ${maskPII(winPythonDirs()[0])}` };
+  } catch (e) { console.log(`python install failed: ${e.message}`); return { ok: false, out: e.message }; }
+  finally { try { fs.unlinkSync(tmp); } catch { /* temp */ } }
+}
 async function installMT5Module() {
-  let last = { code: -1, out: 'Python 3 не найден' };
-  for (const [bin, args] of pythonCandidates()) {
-    last = await runCmd(bin, [...args, '-m', 'pip', 'install', '--upgrade', 'MetaTrader5'], 300000);
-    if (last.code === 0) break;
+  const tryPip = async () => {
+    let last = { code: -1, out: 'Python 3 не найден' };
+    for (const [bin, args] of pythonCandidates()) {
+      last = await runCmd(bin, [...args, '-m', 'pip', 'install', '--upgrade', 'MetaTrader5'], 300000);
+      if (last.code === 0) break;
+    }
+    return last;
+  };
+  let last = await tryPip();
+  // no Python, or an old / 32-bit one without MetaTrader5 wheels → install Python 3.13 (per-user) and retry
+  if (last.code !== 0 && IS_WIN && !CFG.pythonCmd && !winPythonDirs().some(d => /Python31[34]$/.test(d))) {
+    const py = await installPython();
+    if (!py.ok) return { ok: false, out: `Python: ${py.out}\n${maskPII(last.out).slice(-800)}` };
+    last = await tryPip();
   }
   console.log(`MetaTrader5 module install: exit ${last.code}`);
   const ok = last.code === 0;
@@ -1467,13 +1548,15 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-cache' });
       return res.end(diagnosticsText(h));
     }
-    if (req.method === 'POST' && /^\/api\/(health\/claude-test|claude\/login|claude\/install|mt5\/reconnect|mt5\/install)$/.test(url.pathname)) {
+    if (req.method === 'POST' && /^\/api\/(health\/claude-test|claude\/login|claude\/install|mt5\/reconnect|mt5\/install|git\/install|python\/install)$/.test(url.pathname)) {
       if (!localOrigin(req)) return sendJSON(res, 403, { error: 'forbidden origin' });
       await readBody(req).catch(() => ({}));
       if (url.pathname === '/api/health/claude-test') { await claudeVersion(true); return sendJSON(res, 200, { test: await claudeTest(), health: await health() }); }
       if (url.pathname === '/api/claude/login') return sendJSON(res, 200, openClaudeLogin());
       if (url.pathname === '/api/claude/install') return sendJSON(res, 200, { ...(await installClaude()), health: await health({ force: true }) });
       if (url.pathname === '/api/mt5/install') return sendJSON(res, 200, { ...(await installMT5Module()), health: await health() });
+      if (url.pathname === '/api/git/install') return sendJSON(res, 200, { ...(await installGit()), health: await health() });
+      if (url.pathname === '/api/python/install') return sendJSON(res, 200, { ...(await installPython()), health: await health() });
       await mt5Reconnect(); return sendJSON(res, 200, { health: await health() });
     }
     if (req.method === 'GET' && url.pathname === '/api/klines') {
