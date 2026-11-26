@@ -110,12 +110,30 @@
     return `<div class="st-card" data-s="${it.state}">
       <div class="st-row"><i class="st-dot" data-s="${it.state}"></i><b>${esc(it.title)}</b><span class="st-badge" data-s="${it.state}">${STATE_TXT[it.state] || it.state}</span></div>
       <div class="st-sum">${esc(it.summary)}</div>
+      ${it.auth ? authBlock(it.auth) : ''}
       ${showHint ? `<div class="st-hint">${esc(it.hint)}</div>` : ''}
       ${(it.cmds || []).map(c => `<div class="st-cmd"><span class="muted">${esc(c.label)}:</span><code>${esc(c.text)}</code><button class="st-mini" data-copy="${esc(c.text)}">Копировать</button></div>`).join('')}
       ${it.details && it.details.length ? `<div class="st-kv">${it.details.map(([k, v]) => `<span>${esc(k)}</span><span>${esc(v)}</span>`).join('')}</div>` : ''}
       ${n ? `<div class="st-note ${n.ok ? 'ok' : 'bad'}">${esc(n.text)}${n.out ? `<pre>${esc(n.out)}</pre>` : ''}</div>` : ''}
       ${(it.actions || []).length || it.link ? `<div class="st-acts">${(it.actions || []).map(a => { const A = ACT[a] || { label: a }; return `<button class="st-btn${A.primary ? ' pri' : ''}" data-act="${a}" data-item="${it.id}" ${ST.busy[a] ? 'disabled' : ''}>${esc(ST.busy[a] ? (A.busy || '…') : A.label)}</button>`; }).join('')}${it.link ? `<a class="st-btn" href="${esc(it.link.url)}" target="_blank" rel="noopener">${esc(it.link.label)} ↗</a>` : ''}</div>` : ''}
     </div>`;
+  }
+
+  // Claude Code sign-in: the user's own choice — subscription or own API key
+  function authBlock(a) {
+    const api = a.mode === 'apikey';
+    return `<div class="st-auth"><span class="muted">Вход:</span>
+      <label><input type="radio" name="stAuth" value="subscription" ${api ? '' : 'checked'}> Подписка Claude</label>
+      <label><input type="radio" name="stAuth" value="apikey" ${api ? 'checked' : ''}> Свой API-ключ</label></div>
+      ${api ? `<div class="st-keyrow"><input type="password" id="stKey" placeholder="${a.key ? 'Сохранён: ' + esc(a.key) + (a.keySource === 'environment' ? ' (из окружения)' : '') : 'sk-ant-…'}" autocomplete="off" spellcheck="false">
+        <button class="st-btn pri" id="stKeySave">Сохранить</button>${a.keySource === 'settings' ? '<button class="st-btn" id="stKeyDel" title="Удалить сохранённый ключ">Удалить</button>' : ''}</div>
+        <div class="st-keyhint muted">Ключ берётся в <a href="https://platform.claude.com/" target="_blank" rel="noopener">Claude Console</a> (раздел API keys), оплата — по расходу токенов с вашего счёта Anthropic. Хранится только на этом компьютере.</div>` :
+        '<div class="st-keyhint muted">Запросы Panda расходуют лимиты вашей подписки Pro или Max (отдельный месячный кредит для программного использования).</div>'}`;
+  }
+  async function saveAuth(body, note) {
+    try { const r = await req('/api/claude/auth', body); ST.health = r.health; ST.notes.claude = note ? { ok: true, text: note } : null; }
+    catch (e) { ST.notes.claude = { ok: false, text: e.message }; }
+    paintDot(); render();
   }
 
   function appCard() {
@@ -169,6 +187,10 @@
     body.querySelectorAll('[data-d]').forEach(b => { b.onclick = () => desk(b.dataset.d, b); });
     body.querySelectorAll('[data-w]').forEach(b => { b.onclick = async () => { b.disabled = true; b.textContent = 'Перезапускаю…'; try { await req('/api/admin/restart', {}); } catch { /* connection drops */ } setTimeout(() => location.reload(), 3500); }; });
     body.querySelectorAll('[data-upd]').forEach(b => { b.onclick = () => { b.disabled = true; b.textContent = 'Перезапускаю…'; D.installUpdate(); }; });
+    body.querySelectorAll('input[name="stAuth"]').forEach(r => { r.onchange = () => saveAuth({ mode: r.value }, r.value === 'apikey' ? 'Режим «Свой API-ключ». Вставьте ключ и нажмите «Сохранить», затем «Проверить Panda».' : 'Режим «Подписка Claude». Нажмите «Проверить Panda».'); });
+    const ks = $('stKeySave'); if (ks) ks.onclick = () => { const v = $('stKey').value.trim(); if (!v) { $('stKey').focus(); return; } saveAuth({ mode: 'apikey', key: v }, 'Ключ сохранён. Нажмите «Проверить Panda».'); };
+    const kd = $('stKeyDel'); if (kd) kd.onclick = () => saveAuth({ mode: 'apikey', clearKey: true }, 'Сохранённый ключ удалён.');
+    const ki = $('stKey'); if (ki) ki.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); ks.click(); } };
     const au = $('stAuto'); if (au) au.onchange = async () => { ST.desk.autostart = await D.setAutostart(au.checked); };
   }
   async function desk(fn, btn) {

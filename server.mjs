@@ -447,6 +447,18 @@ try { W.events = fs.readFileSync(EVENTS_FILE, 'utf8').trim().split('\n').filter(
 const saveWatches = () => writeJSON(WATCH_FILE, W.list);
 const saveSettings = () => writeJSON(SETTINGS_FILE, W.settings);
 const tg = () => W.settings.telegram || {};
+// How Claude Code signs in is the user's choice (Anthropic's terms: a product must not restrict Claude Code's own auth methods).
+// subscription → the user's Claude plan (a stray ANTHROPIC_API_KEY in the environment is not passed, so nothing is billed by surprise);
+// apikey → the user's own Anthropic API key (from Settings, config.json or the environment) is passed to Claude Code.
+const claudeAuth = () => W.settings.claudeAuth || { mode: 'subscription' };
+const claudeKey = () => { const a = claudeAuth(); return a.key || CFG.apiKey || process.env.ANTHROPIC_API_KEY || ''; };
+function claudeEnv(base) {
+  const env = withGitBash({ ...base });
+  if (claudeAuth().mode === 'apikey') { const k = claudeKey(); if (k) env.ANTHROPIC_API_KEY = k; else delete env.ANTHROPIC_API_KEY; }
+  else delete env.ANTHROPIC_API_KEY;
+  return env;
+}
+const maskKey = k => k ? `${k.slice(0, 7)}…${k.slice(-4)}` : '';
 const htmlEsc = x => String(x).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 const fmtUtc = t => new Date(t * 1000).toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
 
@@ -985,8 +997,7 @@ async function agentTurnClaudeCode(body, emit) {
 
   emit({ type: 'status', text: 'Думаю…' });
   await new Promise((resolve, reject) => {
-    const env = withGitBash({ ...process.env, QL_PORT: String(CFG.port), QL_SID: sid });
-    delete env.ANTHROPIC_API_KEY; // force subscription (OAuth) login, never bill the API
+    const env = claudeEnv({ ...process.env, QL_PORT: String(CFG.port), QL_SID: sid });
     // Windows: claude is a .cmd shim → run it through cmd.exe explicitly (no shell:true → no DEP0190 warning)
     const isWin = process.platform === 'win32';
     const cmd = isWin ? (process.env.ComSpec || 'cmd.exe') : CFG.claudeBin;
@@ -1201,7 +1212,7 @@ function withGitBash(env) { const b = gitBashPath(); if (b && !env.CLAUDE_CODE_G
 // Run the Claude Code CLI the same way the chat does (Windows: through cmd.exe because of the .cmd shim)
 function runClaudeCli(args, { timeout = 30000, cwd } = {}) {
   return new Promise(resolve => {
-    const env = withGitBash({ ...process.env }); delete env.ANTHROPIC_API_KEY;
+    const env = claudeEnv(process.env);
     const cmd = IS_WIN ? (process.env.ComSpec || 'cmd.exe') : CFG.claudeBin;
     const cmdArgs = IS_WIN ? ['/d', '/s', '/c', `"${[quoteArg(CFG.claudeBin), ...args.map(quoteArg)].join(' ')}"`] : args;
     let out = '', err = '', done = false, child = null, timer = null;
@@ -1331,14 +1342,18 @@ async function health({ force = false } = {}) {
     cl.cmds = CLAUDE_INSTALL; cl.link = { label: 'Инструкция Claude Code', url: 'https://docs.claude.com/en/docs/claude-code/overview' };
     cl.actions.push('claude.install');
   } else {
-    cl.details.push(['Версия', cv.version], ['Путь', maskPII(CFG.claudeBin)]);
+    const au = claudeAuth(), key = claudeKey();
+    cl.auth = { mode: au.mode, key: maskKey(key), keySource: au.key ? 'settings' : key ? 'environment' : '' };
+    cl.details.push(['Версия', cv.version], ['Путь', maskPII(CFG.claudeBin)], ['Вход', au.mode === 'apikey' ? (key ? `свой API-ключ ${maskKey(key)}` : 'API-ключ не задан') : 'подписка Claude']);
     const test = HC.test, lastErrNewer = AG.lastErr && AG.lastErrAt > AG.lastOk;
     if (test && !test.ok && test.t >= AG.lastOk) Object.assign(cl, { state: 'err', summary: test.summary, hint: test.hint }), cl.details.push(['Ответ', maskPII(test.raw).slice(0, 300)]);
     else if (lastErrNewer) { const c = classifyClaudeErr(AG.lastErr); Object.assign(cl, { state: 'err', summary: c.summary, hint: c.hint }); cl.details.push(['Последняя ошибка', `${maskPII(AG.lastErr).slice(0, 300)} (${ago(AG.lastErrAt)})`]); }
     else if (AG.lastOk) Object.assign(cl, { state: 'ok', summary: `Работает · последний ответ ${ago(AG.lastOk)}` });
     else Object.assign(cl, { state: 'idle', summary: 'Установлен, вход не проверен', hint: 'Нажмите «Проверить Panda» — будет отправлен один короткий запрос через вашу подписку.' });
     if (test) cl.details.push(['Проверка', `${test.ok ? 'успешно' : 'ошибка'} · ${ago(test.t)}${test.ok ? ` · ${(test.ms / 1000).toFixed(1)} с` : ''}`]);
-    cl.actions.push('claude.test', 'claude.login');
+    cl.actions.push('claude.test'); if (au.mode !== 'apikey') cl.actions.push('claude.login');
+    if (au.mode === 'apikey' && !key) Object.assign(cl, { state: 'err', summary: 'Выбран вход по API-ключу, но ключ не задан', hint: 'Вставьте ключ из Claude Console (platform.claude.com → API keys) и нажмите «Сохранить», или выберите «Подписка Claude».' });
+    else if (au.mode === 'apikey' && cl.state === 'err' && /вход/i.test(cl.summary)) Object.assign(cl, { summary: 'API-ключ не принят', hint: 'Проверьте, что ключ скопирован целиком, не отозван и на счёте Anthropic есть баланс (Claude Console → Billing).' });
     if (IS_WIN) {
       const gb = gitBashPath();
       cl.details.push(['Оболочка', gb ? `Git Bash · ${maskPII(gb)}` : 'нет Git Bash (только PowerShell)']);
@@ -1411,14 +1426,14 @@ function localOrigin(req) {
   try { return ['127.0.0.1', 'localhost', '[::1]'].includes(new URL(o).hostname); } catch { return false; }
 }
 function openClaudeLogin() {
-  const env = { ...process.env }; delete env.ANTHROPIC_API_KEY;
+  const env = claudeEnv(process.env);
   if (IS_WIN) {
     const p = spawn(process.env.ComSpec || 'cmd.exe', ['/d', '/c', 'start', '"Claude Code login"', 'cmd', '/k', quoteArg(CFG.claudeBin)], { env, detached: true, stdio: 'ignore', windowsHide: false, windowsVerbatimArguments: true });
     p.unref(); return { ok: true };
   }
   if (IS_MAC) {
     const bin = CFG.claudeBin.replace(/'/g, `'\\''`).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-    const p = spawn('osascript', ['-e', `tell application "Terminal" to do script "unset ANTHROPIC_API_KEY; '${bin}'"`, '-e', 'tell application "Terminal" to activate'], { detached: true, stdio: 'ignore' });
+    const p = spawn('osascript', ['-e', `tell application "Terminal" to do script "${claudeAuth().mode === 'apikey' ? '' : 'unset ANTHROPIC_API_KEY; '}'${bin}'"`, '-e', 'tell application "Terminal" to activate'], { detached: true, stdio: 'ignore' });
     p.unref(); return { ok: true };
   }
   return { ok: false, error: 'Откройте терминал и выполните команду: claude' };
@@ -1556,9 +1571,22 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-cache' });
       return res.end(diagnosticsText(h));
     }
-    if (req.method === 'POST' && /^\/api\/(health\/claude-test|claude\/login|claude\/install|mt5\/reconnect|mt5\/install|git\/install|python\/install)$/.test(url.pathname)) {
+    if (req.method === 'POST' && /^\/api\/(health\/claude-test|claude\/login|claude\/install|claude\/auth|mt5\/reconnect|mt5\/install|git\/install|python\/install)$/.test(url.pathname)) {
       if (!localOrigin(req)) return sendJSON(res, 403, { error: 'forbidden origin' });
-      await readBody(req).catch(() => ({}));
+      const pb = await readBody(req).catch(() => ({}));
+      if (url.pathname === '/api/claude/auth') {
+        const mode = pb.mode === 'apikey' ? 'apikey' : 'subscription', cur = claudeAuth();
+        const next = { mode, ...(cur.key ? { key: cur.key } : {}) };
+        if (pb.clearKey) delete next.key;
+        if (typeof pb.key === 'string' && pb.key.trim()) {
+          const k = pb.key.trim();
+          if (!/^sk-ant-[A-Za-z0-9_-]{20,}$/.test(k)) return sendJSON(res, 400, { error: 'Это не похоже на ключ Anthropic (должен начинаться с sk-ant-)' });
+          next.key = k;
+        }
+        W.settings.claudeAuth = next; saveSettings(); HC.test = null; AG.lastErr = ''; AG.lastOk = 0;
+        console.log(`claude auth: ${mode}${next.key ? ' (key saved)' : ''}`);
+        return sendJSON(res, 200, { ok: true, health: await health() });
+      }
       if (url.pathname === '/api/health/claude-test') { await claudeVersion(true); return sendJSON(res, 200, { test: await claudeTest(), health: await health() }); }
       if (url.pathname === '/api/claude/login') return sendJSON(res, 200, openClaudeLogin());
       if (url.pathname === '/api/claude/install') return sendJSON(res, 200, { ...(await installClaude()), health: await health({ force: true }) });

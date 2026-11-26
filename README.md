@@ -125,7 +125,8 @@ Pandich Lab — приложение, которое работает у теб�
 Panda работает через твой собственный Claude:
 
 - **По умолчанию** через локальный [Claude Code](https://docs.claude.com/en/docs/claude-code/overview), вошедший в твою подписку Claude (Pro/Max). Запросы расходуют её лимиты.
-- **Или** через твой API-ключ Anthropic: `"backend": "api"` и `"anthropicApiKey"` в `config.json` (или переменная `ANTHROPIC_API_KEY`). Этот режим проще и проверен меньше, чем Claude Code.
+- **Или** через твой API-ключ Anthropic: «⚙ Настройки» → карточка Claude → «Свой API-ключ». Ключ хранится только на твоём компьютере, оплата идёт по расходу токенов с твоего счёта Anthropic.
+- Способ входа выбираешь ты сам; приложение не отключает ни один способ входа Claude Code.
 
 Проект не включает и не раздаёт ничьих учётных данных: каждый пользователь подключает свои.
 
@@ -238,7 +239,8 @@ Features:
 Panda runs on **your own** Claude:
 
 - **By default** through a local [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) signed in to your Claude subscription. Usage counts against that plan's limits.
-- **Or** with your own Anthropic API key: `"backend": "api"` plus `"anthropicApiKey"` in `config.json` (or the `ANTHROPIC_API_KEY` env var). This mode is simpler and less tested than Claude Code.
+- **Or** with your own Anthropic API key: «⚙ Настройки» (Settings) → Claude card → «Свой API-ключ». The key stays on your computer; usage is billed to your Anthropic account.
+- You choose the sign-in method; the app does not disable any of Claude Code's sign-in methods.
 
 The project ships no credentials; every user brings their own.
 
