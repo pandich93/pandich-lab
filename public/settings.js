@@ -149,7 +149,8 @@
     if (u) kv.push(['Обновления', updText(u)]);
     const updBtn = !u ? '' : u.state === 'ready' ? `<button class="st-btn pri" data-upd="install">⬆ Перезапустить и обновить до ${esc(u.version)}</button>`
       : u.state === 'manual' ? `<a class="st-btn pri" href="https://github.com/pandich93/pandich-lab/releases/latest/download/PandichLab-mac.dmg" target="_blank" rel="noopener">Скачать ${esc(u.version)} ↗</a>` : '';
-    return `<div class="st-card st-app"><div class="st-row"><b>Приложение</b></div>${updBtn ? `<div class="st-acts">${updBtn}</div>` : ''}
+    const L = window.QLI18n, langSel = L ? `<div class="st-lang"><span class="muted">Язык интерфейса</span><select id="stLang">${Object.entries(L.langs).map(([k, n]) => `<option value="${k}" ${k === L.lang ? 'selected' : ''}>${n}</option>`).join('')}</select></div>` : '';
+    return `<div class="st-card st-app"><div class="st-row"><b>Приложение</b></div>${langSel}${updBtn ? `<div class="st-acts">${updBtn}</div>` : ''}
       <div class="st-kv">${kv.map(([k, v]) => `<span>${esc(k)}</span><span>${esc(v)}</span>`).join('')}</div>
       ${n ? `<div class="st-note ${n.ok ? 'ok' : 'bad'}">${esc(n.text)}</div>` : ''}${acts}</div>`;
   }
@@ -191,6 +192,7 @@
     const ks = $('stKeySave'); if (ks) ks.onclick = () => { const v = $('stKey').value.trim(); if (!v) { $('stKey').focus(); return; } saveAuth({ mode: 'apikey', key: v }, 'Ключ сохранён. Нажмите «Проверить Panda».'); };
     const kd = $('stKeyDel'); if (kd) kd.onclick = () => saveAuth({ mode: 'apikey', clearKey: true }, 'Сохранённый ключ удалён.');
     const ki = $('stKey'); if (ki) ki.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); ks.click(); } };
+    const sl = $('stLang'); if (sl) sl.onchange = () => window.QLI18n.setLang(sl.value);
     const au = $('stAuto'); if (au) au.onchange = async () => { ST.desk.autostart = await D.setAutostart(au.checked); };
   }
   async function desk(fn, btn) {

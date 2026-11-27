@@ -41,7 +41,7 @@ Lead with the conclusion (trend / bias), then key levels with prices, then what 
 If asked to mark levels — draw them (hline/rect/text) after `draw-clear` of your previous ones, and list them in the reply.
 
 ## Reply
-Short, in the user's language (usually Russian). Do not paste the whole code — the app shows it and the chart already has it.
+Short, in the user's language (the app also passes the interface language — Russian, Uzbek or English). Do not paste the whole code — the app shows it and the chart already has it.
 
 ## Built-in library
 `../library/*.pine` holds tested Pine v6 scripts for this runtime (MAs, VWAP, BB/KC, Supertrend, Ichimoku, RSI/MACD/Stoch/ADX, prev-day levels, pivots, sessions, swing structure HH/HL/BOS, FVG boxes, squeeze, an EMA+ATR strategy). Read one first when you need a known-good idiom (request.security without repaint, box/label management, alertcondition) instead of guessing.

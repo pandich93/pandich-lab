@@ -560,3 +560,4 @@ body.embed .legend{max-width:85%}
 .st-keyrow{display:flex;gap:6px}
 .st-keyrow input{flex:1;min-width:0;background:#121316;border:1px solid var(--line);border-radius:6px;padding:5px 8px;color:var(--text);font:12px ui-monospace,Consolas,monospace}
 .st-keyhint{font-size:11.5px;line-height:1.45}.st-keyhint a{color:#5b8cff}
+.st-lang{display:flex;align-items:center;gap:10px;font-size:12.5px}.st-lang select{background:#121316;border:1px solid var(--line);color:var(--text);border-radius:6px;padding:4px 8px;font:inherit}

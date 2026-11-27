@@ -12,4 +12,5 @@ contextBridge.exposeInMainWorld('pandichDesktop', {
   installUpdate: () => ipcRenderer.invoke('app:installUpdate'),
   restartServer: () => ipcRenderer.invoke('app:restartServer'),
   logTail: () => ipcRenderer.invoke('app:logTail'),
+  setLang: l => ipcRenderer.invoke('app:setLang', l),
 });

@@ -190,6 +190,10 @@ Panda работает через твой собственный Claude:
 - `data/`: сигналы Watch, настройки Telegram, шаблоны, макеты;
 - `scripts/`: сохранённые скрипты.
 
+### Язык интерфейса
+
+Русский, O'zbekcha и English. Язык выбирается в мастере первого запуска или в «⚙ Настройки» → «Приложение». Panda отвечает на языке интерфейса.
+
 ### Если что-то не подключается
 
 Нажмите **⚙ Настройки** в правом верхнем углу. Там видно состояние Claude Code (Panda), MetaTrader 5, Binance, интернета и Telegram. Для каждой проблемы написано, что сделать, и есть кнопки: «Проверить Panda», «Войти в Claude», «Установить Claude Code», «Переподключить MT5», «Установить модуль». Точка на кнопке настроек показывает общее состояние: зелёная — всё в порядке, жёлтая — предупреждение, красная — проблема.
@@ -283,6 +287,10 @@ Copy `config.example.json` to `config.json`.
 
 Your data stays in `data/` and `scripts/`, both git-ignored.
 
+### Interface language
+
+Russian, Uzbek (O'zbekcha) and English. Pick it in the first-run wizard or in «⚙ Настройки» (Settings) → App. Panda replies in the interface language.
+
 ### Troubleshooting connections
 
 Click **⚙ Настройки** (Settings) in the top-right corner. It shows the status of Claude Code (Panda), MetaTrader 5, Binance, the internet and Telegram. Each problem comes with a plain-language fix and one-click actions: test Panda, sign in to Claude, install Claude Code, reconnect MT5, install the Python module. The dot on the Settings button shows the overall state: green means all good, yellow a warning, red a problem.
@@ -332,6 +340,10 @@ Yoki AI-agentingiz bo'lsa, [yuqoridagi promptni](#-install-with-an-ai-agent) ung
 ### AI qanday ishlaydi
 
 Panda sizning o'z **Claude** obunangiz (Pro/Max) orqali, kompyuteringizdagi Claude Code yordamida ishlaydi. Grafik va indikatorlar obunasiz ham ishlaydi. Dastur interfeysi hozircha rus tilida.
+
+### Interfeys tili
+
+Ruscha, O'zbekcha va English. Tilni birinchi ishga tushirishdagi sozlash ustasida yoki «⚙ Sozlamalar» → «Ilova» bo'limida tanlang. Panda interfeys tilida javob beradi.
 
 ### Ulanish bilan muammo bo'lsa
 

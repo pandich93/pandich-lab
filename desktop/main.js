@@ -24,6 +24,10 @@ const PORTS = [3779, 3780, 3781, 3782, 3783, 3784, 3785]; // stable port → the
 
 const S = { proc: null, port: null, quitting: false, win: null, setupWin: null, tray: null, crashes: [], logStream: null };
 const settings = Object.assign({ setupDone: false, claudeBin: '', autostart: false, trayHintShown: false }, readJSON(SETTINGS_FILE, {}));
+// interface language for the tray, notifications and the setup wizard (the web UI keeps its own copy in localStorage)
+const L10N = require('./i18n-desktop');
+const curLang = () => settings.lang || L10N.resolve(app.getLocale());
+let tr = L10N.make(curLang());
 
 function readJSON(f, d) { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return d; } }
 function saveSettings() { try { fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2)); } catch (e) { log(`settings: ${e.message}`); } }
@@ -123,13 +127,13 @@ async function startServer() {
   log(`server: start on ${S.port}, claude=${claude || 'not found'}`);
   S.proc = spawn(process.execPath, [path.join(SERVER_DIR, 'server.mjs')], { cwd: SERVER_DIR, env, windowsHide: true });
   S.proc.stdout.on('data', c => S.logStream && S.logStream.write(c));
-  S.proc.stderr.on('data', c => { if (S.logStream) S.logStream.write(c); if (/ERR_MODULE_NOT_FOUND|Cannot find (package|module)/.test(String(c))) S.broken = 'Сборка неполная: внутри приложения нет зависимостей сервера (node_modules). Пересобери установщик через desktop\\build-win.bat из папки Pandich Lab.'; });
+  S.proc.stderr.on('data', c => { if (S.logStream) S.logStream.write(c); if (/ERR_MODULE_NOT_FOUND|Cannot find (package|module)/.test(String(c))) S.broken = tr('Сборка неполная: внутри приложения нет модуля pinets. Переустановите Pandich Lab из официального релиза.'); });
   S.proc.on('exit', code => {
     log(`server: exit ${code}`);
     S.proc = null;
     if (S.quitting) return;
     const now = Date.now(); S.crashes = S.crashes.filter(t => now - t < 60000); S.crashes.push(now);
-    if (S.broken || S.crashes.length > 5) { showError(S.broken || 'Сервер Pandich Lab падает при запуске. Подробности — в логе (меню в трее → «Логи»).'); return; }
+    if (S.broken || S.crashes.length > 5) { showError(S.broken || tr('Сервер Pandich Lab падает при запуске. Подробности — в логе (меню в трее → «Логи»).')); return; }
     setTimeout(() => startServer().then(() => S.win && S.win.webContents.reload()), code === 99 ? 300 : 1500); // 99 = planned restart
   });
   for (let i = 0; i < 150; i++) { if (await ping(S.port)) return true; await new Promise(r => setTimeout(r, 200)); if (!S.proc) return false; }
@@ -151,7 +155,7 @@ function createMain() {
     width: 1500, height: 920, minWidth: 980, minHeight: 600, show: false, backgroundColor: '#131416', title: 'Pandich Lab', icon: ICON,
     autoHideMenuBar: true, webPreferences: { contextIsolation: true, sandbox: true, spellcheck: false, preload: path.join(__dirname, 'app-preload.js') },
   });
-  S.win.loadURL(`http://127.0.0.1:${S.port}/`);
+  S.win.loadURL(`http://127.0.0.1:${S.port}/?lang=${curLang()}`);
   S.win.once('ready-to-show', () => { if (!process.argv.includes('--hidden')) S.win.show(); });
   S.win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url) && !url.startsWith(`http://127.0.0.1:${S.port}`)) shell.openExternal(url); return { action: 'deny' }; });
   S.win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith(`http://127.0.0.1:${S.port}`)) { e.preventDefault(); shell.openExternal(url); } });
@@ -161,7 +165,7 @@ function createMain() {
     if (S.quitting) return;
     e.preventDefault(); S.win.hide(); // keep running for Watch mode
     if (!settings.trayHintShown && Notification.isSupported()) {
-      new Notification({ title: 'Pandich Lab работает в фоне', body: `Сигналы Watch продолжают приходить. Открыть или выйти — значок в ${isMac ? 'строке меню' : 'трее'}.` }).show();
+      new Notification({ title: tr('Pandich Lab работает в фоне'), body: tr('Сигналы Watch продолжают приходить. Открыть или выйти — значок в {0}.', tr(isMac ? 'строке меню' : 'трее')) }).show();
       settings.trayHintShown = true; saveSettings();
     }
   });
@@ -175,7 +179,7 @@ function showMain() {
 function openSetup() {
   if (S.setupWin) { S.setupWin.show(); S.setupWin.focus(); return; }
   S.setupWin = new BrowserWindow({
-    width: 760, height: 720, resizable: true, backgroundColor: '#131416', title: 'Pandich Lab — настройка', icon: ICON, autoHideMenuBar: true,
+    width: 760, height: 720, resizable: true, backgroundColor: '#131416', title: tr('Pandich Lab — настройка'), icon: ICON, autoHideMenuBar: true,
     webPreferences: { contextIsolation: true, sandbox: false, preload: path.join(__dirname, 'preload.js') },
   });
   S.setupWin.loadFile(path.join(__dirname, 'setup.html'));
@@ -188,25 +192,25 @@ function openSettings() {
 }
 function showError(text) {
   const w = S.win || new BrowserWindow({ width: 640, height: 300, backgroundColor: '#131416', icon: ICON, autoHideMenuBar: true });
-  w.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(`<body style="font:14px system-ui;background:#131416;color:#d1d4dc;padding:24px"><h3>Pandich Lab</h3><p>${text.replace(/</g, '&lt;')}</p><p style="color:#888">Лог: ${LOG_DIR.replace(/</g, '&lt;')}</p></body>`));
+  w.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(`<body style="font:14px system-ui;background:#131416;color:#d1d4dc;padding:24px"><h3>Pandich Lab</h3><p>${text.replace(/</g, '&lt;')}</p><p style="color:#888">${tr('Лог: {0}', LOG_DIR.replace(/</g, '&lt;'))}</p></body>`));
   w.show();
 }
 
 // ───────── tray / menu bar ─────────
 function trayMenu() {
   return Menu.buildFromTemplate([
-    ...(U.state === 'ready' ? [{ label: `⬆ Перезапустить и обновить до ${U.version}`, click: () => installUpdate(true) }, { type: 'separator' }] : []),
-    { label: 'Открыть Pandich Lab', click: showMain },
-    { label: 'Настройки и диагностика', click: openSettings },
+    ...(U.state === 'ready' ? [{ label: tr('⬆ Перезапустить и обновить до {0}', U.version), click: () => installUpdate(true) }, { type: 'separator' }] : []),
+    { label: tr('Открыть Pandich Lab'), click: showMain },
+    { label: tr('Настройки и диагностика'), click: openSettings },
     { type: 'separator' },
-    { label: 'Запускать при входе в систему', type: 'checkbox', checked: settings.autostart, click: m => setAutostart(m.checked) },
-    { label: 'Мастер настройки (Claude Code, MT5)', click: openSetup },
-    { label: 'Папка данных', click: () => shell.openPath(HOME) },
-    { label: 'Логи', click: () => shell.openPath(LOG_DIR) },
-    { label: U.state === 'downloading' ? `Скачиваю обновление ${U.version}… ${U.percent}%` : 'Проверить обновления', enabled: U.state !== 'downloading', click: async () => { const r = await checkUpdates(true); note('Обновления', r.text); } },
+    { label: tr('Запускать при входе в систему'), type: 'checkbox', checked: settings.autostart, click: m => setAutostart(m.checked) },
+    { label: tr('Мастер настройки (Claude Code, MT5)'), click: openSetup },
+    { label: tr('Папка данных'), click: () => shell.openPath(HOME) },
+    { label: tr('Логи'), click: () => shell.openPath(LOG_DIR) },
+    { label: U.state === 'downloading' ? tr('Скачиваю обновление {0}… {1}%', U.version, U.percent) : tr('Проверить обновления'), enabled: U.state !== 'downloading', click: async () => { const r = await checkUpdates(true); note(tr('Обновления'), r.text); } },
     { type: 'separator' },
-    { label: 'Перезапустить сервер', click: async () => { await stopServer(); } }, // exit → auto-restart
-    { label: 'Выход', click: () => { S.quitting = true; app.quit(); } },
+    { label: tr('Перезапустить сервер'), click: async () => { await stopServer(); } }, // exit → auto-restart
+    { label: tr('Выход'), click: () => { S.quitting = true; app.quit(); } },
   ]);
 }
 function createTray() {
@@ -238,8 +242,8 @@ function updateChanged() {
 }
 function setU(patch) { Object.assign(U, patch); updateChanged(); }
 function updaterAvailable() {
-  if (!app.isPackaged) return 'локальный запуск из исходников';
-  if (isWin && !fs.existsSync(path.join(process.resourcesPath, 'app-update.yml'))) return 'сборка без публикации (собрана вручную) — обновления только переустановкой';
+  if (!app.isPackaged) return tr('локальный запуск из исходников');
+  if (isWin && !fs.existsSync(path.join(process.resourcesPath, 'app-update.yml'))) return tr('сборка без публикации (собрана вручную) — обновления только переустановкой');
   return '';
 }
 function initUpdater() {
@@ -263,23 +267,23 @@ function initUpdater() {
 }
 function readyNote() {
   if (!Notification.isSupported()) return;
-  const n = new Notification({ title: `Pandich Lab ${U.version} готов к установке`, body: 'Нажмите, чтобы перезапустить и обновить. Или обновится при выходе из приложения.' });
+  const n = new Notification({ title: tr('Pandich Lab {0} готов к установке', U.version), body: tr('Нажмите, чтобы перезапустить и обновить. Или обновится при выходе из приложения.') });
   n.on('click', () => installUpdate()); n.show();
 }
 async function checkUpdates(manual) {
-  if (U.state === 'off') return { ok: false, text: `Автообновление выключено: ${U.reason}.` };
-  if (U.state === 'ready') return { ok: true, update: U.version, text: `Версия ${U.version} скачана — нажмите «Перезапустить и обновить».` };
-  if (U.state === 'downloading') return { ok: true, update: U.version, text: `Скачиваю версию ${U.version}… ${U.percent}%` };
+  if (U.state === 'off') return { ok: false, text: tr('Автообновление выключено: {0}.', U.reason) };
+  if (U.state === 'ready') return { ok: true, update: U.version, text: tr('Версия {0} скачана — нажмите «Перезапустить и обновить».', U.version) };
+  if (U.state === 'downloading') return { ok: true, update: U.version, text: tr('Скачиваю версию {0}… {1}%', U.version, U.percent) };
   try {
     if (isWin) {
       const r = await winUpdater.checkForUpdates();
       const v = r && r.updateInfo && r.updateInfo.version;
-      if (v && newer(v, app.getVersion())) return { ok: true, update: v, text: `Найдена версия ${v} — скачиваю, потом предложу перезапустить.` };
-      return { ok: true, text: 'Установлена последняя версия.' };
+      if (v && newer(v, app.getVersion())) return { ok: true, update: v, text: tr('Найдена версия {0} — скачиваю, потом предложу перезапустить.', v) };
+      return { ok: true, text: tr('Установлена последняя версия.') };
     }
     if (isMac) return await macCheck(manual);
-    return { ok: false, text: 'Автообновление есть только для Windows и macOS.' };
-  } catch (e) { log(`update: ${e.message}`); setU({ state: 'error', error: e.message.slice(0, 200), checkedAt: Date.now() }); return { ok: false, text: 'Не удалось проверить: ' + e.message.slice(0, 120) }; }
+    return { ok: false, text: tr('Автообновление есть только для Windows и macOS.') };
+  } catch (e) { log(`update: ${e.message}`); setU({ state: 'error', error: e.message.slice(0, 200), checkedAt: Date.now() }); return { ok: false, text: tr('Не удалось проверить: {0}', e.message.slice(0, 120)) }; }
 }
 
 // ── macOS self-updater
@@ -295,18 +299,18 @@ async function macCheck(manual) {
   if (!r.ok) throw new Error(`GitHub ${r.status}`);
   const rel = await r.json();
   const v = String(rel.tag_name || '').replace(/^v/, '');
-  if (!v || !newer(v, app.getVersion())) { setU({ state: 'none', checkedAt: Date.now() }); return { ok: true, text: 'Установлена последняя версия.' }; }
+  if (!v || !newer(v, app.getVersion())) { setU({ state: 'none', checkedAt: Date.now() }); return { ok: true, text: tr('Установлена последняя версия.') }; }
   const assets = rel.assets || [];
   const dmg = assets.find(a => /-mac-universal\.dmg$/.test(a.name)) || assets.find(a => /\.dmg$/.test(a.name));
   if (!dmg) throw new Error('в релизе нет .dmg');
-  if (!macCanSwap()) { setU({ state: 'manual', version: v, checkedAt: Date.now(), mac: { url: dmg.browser_download_url } }); if (manual === false) manualNote(); return { ok: true, update: v, text: `Доступна версия ${v}. Приложение запущено не из «Программ», поэтому обновите вручную: скачайте .dmg и перетащите в «Программы».` }; }
+  if (!macCanSwap()) { setU({ state: 'manual', version: v, checkedAt: Date.now(), mac: { url: dmg.browser_download_url } }); if (manual === false) manualNote(); return { ok: true, update: v, text: tr('Доступна версия {0}. Приложение запущено не из «Программ», поэтому обновите вручную: скачайте .dmg и перетащите в «Программы».', v) }; }
   macDownload(v, dmg).catch(e => { log(`update(mac): ${e.message}`); setU({ state: 'error', error: e.message.slice(0, 200) }); });
-  return { ok: true, update: v, text: `Найдена версия ${v} — скачиваю, потом предложу перезапустить.` };
+  return { ok: true, update: v, text: tr('Найдена версия {0} — скачиваю, потом предложу перезапустить.', v) };
 }
 function manualNote() {
   if (!Notification.isSupported() || U.notified === U.version) return;
   U.notified = U.version;
-  const n = new Notification({ title: `Доступна Pandich Lab ${U.version}`, body: 'Нажмите, чтобы скачать новую версию.' });
+  const n = new Notification({ title: tr('Доступна Pandich Lab {0}', U.version), body: tr('Нажмите, чтобы скачать новую версию.') });
   n.on('click', () => shell.openExternal(`https://github.com/${REPO}/releases/latest/download/PandichLab-mac.dmg`)); n.show();
 }
 async function macDownload(v, asset) {
@@ -369,7 +373,7 @@ async function status() {
   let version = '';
   if (claude) { const r = await run(claude, ['--version'], { timeout: 20000, shell: isWin && /\.(cmd|bat)$/i.test(claude) }); if (r.code === 0) version = r.out.trim().split('\n')[0]; }
   const py = isWin ? await findPython() : null;
-  return { platform: process.platform, claude: { path: claude, version }, python: py, git: gitBash(), home: HOME };
+  return { platform: process.platform, claude: { path: claude, version }, python: py, git: gitBash(), home: HOME, lang: curLang() };
 }
 async function findPython() {
   // first 64-bit Python 3.8–3.14 (MetaTrader5 ships win_amd64 wheels only); report an unsuitable one too
@@ -382,11 +386,19 @@ async function findPython() {
     const minor = Number((v || '').split('.')[1]);
     const py = { cmd: [bin.includes(' ') ? `"${bin}"` : bin, ...args].join(' '), bin, args, version: v, mt5: mt5 === 'True', bits: Number(bits) };
     if (py.bits === 64 && minor >= 8 && minor <= 14) return py;
-    unsuitable = unsuitable || { ...py, unsuitable: py.bits !== 64 ? '32-битный' : `версия ${v} не поддерживается модулем MetaTrader5` };
+    unsuitable = unsuitable || { ...py, unsuitable: py.bits !== 64 ? tr('32-битный') : tr('версия {0} не поддерживается модулем MetaTrader5', v) };
   }
   return unsuitable ? { cmd: '', version: '', mt5: false, found: unsuitable } : { cmd: '', version: '', mt5: false };
 }
 ipcMain.handle('setup:status', () => status());
+function applyLang(l) {
+  if (!L10N.LANGS[l] || l === curLang()) return curLang();
+  settings.lang = l; saveSettings(); tr = L10N.make(l);
+  if (S.tray) S.tray.setContextMenu(trayMenu());
+  if (S.setupWin && !S.setupWin.isDestroyed()) S.setupWin.setTitle(tr('Pandich Lab — настройка'));
+  return l;
+}
+ipcMain.handle('setup:setLang', (_e, l) => applyLang(l));
 
 // ───────── main-window bridge (Settings panel) ─────────
 const fromMain = e => !!S.win && e.sender === S.win.webContents;
@@ -404,6 +416,7 @@ ipcMain.handle('app:setAutostart', guard(on => { setAutostart(on); return settin
 ipcMain.handle('app:checkUpdates', guard(() => checkUpdates(true)));
 ipcMain.handle('app:updateState', guard(() => ({ ...U, mac: undefined, current: app.getVersion() })));
 ipcMain.handle('app:installUpdate', guard(() => installUpdate(true)));
+ipcMain.handle('app:setLang', guard(l => applyLang(l)));
 ipcMain.handle('app:restartServer', guard(async () => { await stopServer(); return true; })); // exit → auto-restart + reload
 ipcMain.handle('app:logTail', guard(() => {
   try {
@@ -420,24 +433,24 @@ ipcMain.handle('setup:installClaude', async e => {
   return { ok: r.code === 0, status: await status() };
 });
 ipcMain.handle('setup:loginClaude', async () => {
-  const claude = findClaude(); if (!claude) return { ok: false, error: 'Claude Code не найден' };
-  if (isWin) spawn('cmd.exe', ['/c', 'start', '"Claude Code — вход"', 'cmd', '/k', claude], { env: { ...process.env, PATH: envPath() }, detached: true, windowsHide: false, shell: false }).unref();
+  const claude = findClaude(); if (!claude) return { ok: false, error: tr('Claude Code не найден') };
+  if (isWin) spawn('cmd.exe', ['/c', 'start', '"Claude Code login"', 'cmd', '/k', claude], { env: { ...process.env, PATH: envPath() }, detached: true, windowsHide: false, shell: false }).unref();
   else spawn('osascript', ['-e', `tell application "Terminal" to do script "${claude.replace(/"/g, '\\"')}"`, '-e', 'tell application "Terminal" to activate']).unref();
   return { ok: true };
 });
 ipcMain.handle('setup:installMT5', async e => {
   const send = l => { try { e.sender.send('setup:log', l); } catch { /* closed */ } };
-  const py = await findPython(); if (!py.cmd) return { ok: false, error: 'Подходящий Python 3 не найден', status: await status() };
+  const py = await findPython(); if (!py.cmd) return { ok: false, error: tr('Подходящий Python 3 не найден'), status: await status() };
   const r = await run(py.bin, [...py.args, '-m', 'pip', 'install', '--upgrade', 'MetaTrader5'], { onLine: send });
   return { ok: r.code === 0, status: await status() };
 });
 // Python for MT5 (Windows): official python.org installer, per-user, silent, adds itself to PATH. No admin rights.
 const PY_URL = 'https://www.python.org/ftp/python/3.13.16/python-3.13.16-amd64.exe'; // MetaTrader5 wheels: cp313/cp314 win_amd64
 async function installPython(send) {
-  if (!isWin) return { ok: false, error: 'Python для MT5 нужен только на Windows' };
+  if (!isWin) return { ok: false, error: tr('Python для MT5 нужен только на Windows') };
   const f = path.join(os.tmpdir(), path.basename(PY_URL));
   try {
-    send(`Скачиваю Python 3.13 с python.org…`);
+    send(tr('Скачиваю Python 3.13 с python.org…'));
     const r = await fetch(PY_URL, { signal: AbortSignal.timeout(600000) });
     if (!r.ok || !r.body) throw new Error(`HTTP ${r.status}`);
     const total = Number(r.headers.get('content-length')) || 0;
@@ -449,13 +462,13 @@ async function installPython(send) {
     }
     await new Promise((res, rej) => out.end(e => e ? rej(e) : res()));
     if (fs.statSync(f).size < 10e6) throw new Error('файл скачался не полностью');
-  } catch (e) { return { ok: false, error: `Не удалось скачать Python: ${e.message}` }; }
-  send('Устанавливаю Python (1–2 мин, без окон)…');
+  } catch (e) { return { ok: false, error: tr('Не удалось скачать Python: {0}', e.message) }; }
+  send(tr('Устанавливаю Python (1–2 мин, без окон)…'));
   const r = await run(f, ['/quiet', 'InstallAllUsers=0', 'PrependPath=1', 'Include_launcher=1', 'InstallLauncherAllUsers=0', 'Include_test=0', 'Include_doc=0'], { timeout: 600000 });
   try { fs.unlinkSync(f); } catch { /* temp */ }
-  if (r.code !== 0) return { ok: false, error: `Установщик Python завершился с кодом ${r.code}${r.code === 1602 ? ' (отменено)' : ''}` };
+  if (r.code !== 0) return { ok: false, error: tr('Установщик Python завершился с кодом {0}', r.code) };
   const py = await findPython();
-  return py.cmd ? { ok: true, python: py } : { ok: false, error: 'Python установлен, но не найден — перезапустите Pandich Lab' };
+  return py.cmd ? { ok: true, python: py } : { ok: false, error: tr('Python установлен, но не найден — перезапустите Pandich Lab') };
 }
 ipcMain.handle('setup:installPython', async e => {
   const send = l => { try { e.sender.send('setup:log', l); } catch { /* closed */ } };
@@ -466,13 +479,13 @@ ipcMain.handle('setup:installPython', async e => {
 function serverPost(p, timeout) {
   return new Promise(res => {
     const q = http.request({ host: '127.0.0.1', port: S.port, path: p, method: 'POST', timeout, headers: { 'content-type': 'application/json' } }, x => {
-      let b = ''; x.on('data', c => { b += c; }); x.on('end', () => { try { res(JSON.parse(b)); } catch { res({ ok: false, error: 'Сервер не ответил' }); } });
+      let b = ''; x.on('data', c => { b += c; }); x.on('end', () => { try { res(JSON.parse(b)); } catch { res({ ok: false, error: tr('Сервер не ответил') }); } });
     });
     q.on('error', e => res({ ok: false, error: e.message })); q.on('timeout', () => { q.destroy(); res({ ok: false, error: 'таймаут' }); });
     q.end('{}');
   });
 }
-ipcMain.handle('setup:testClaude', async () => { const r = await serverPost('/api/health/claude-test', 130000); return r.test || { ok: false, summary: r.error || 'Сервер не ответил' }; });
+ipcMain.handle('setup:testClaude', async () => { const r = await serverPost('/api/health/claude-test', 130000); return r.test || { ok: false, summary: r.error || tr('Сервер не ответил') }; });
 ipcMain.handle('setup:installGit', async () => { const r = await serverPost('/api/git/install', 900000); return { ok: !!r.ok, error: r.ok ? '' : (r.out || r.error), out: r.out, status: await status() }; });
 ipcMain.handle('setup:setClaudePath', async (_e, p) => { settings.claudeBin = p || ''; saveSettings(); return status(); });
 ipcMain.handle('setup:openUrl', (_e, url) => { if (/^https:\/\//.test(url)) shell.openExternal(url); });
@@ -494,7 +507,7 @@ app.whenReady().then(async () => {
   if (isMac) app.dock && app.dock.setIcon(nativeImage.createFromPath(ICON));
   createTray();
   const ok = await startServer();
-  if (!ok) { showError('Не удалось запустить сервер Pandich Lab.'); return; }
+  if (!ok) { showError(tr('Не удалось запустить сервер Pandich Lab.')); return; }
   createMain();
   if (!settings.setupDone) openSetup();
   initUpdater();

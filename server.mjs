@@ -818,7 +818,7 @@ Runtime facts (IMPORTANT):
 
 Chart control: use set_chart to switch symbol (Binance tickers like BTCUSDT, ETHUSDT, XAUUSDT) or timeframe when the user asks.
 
-When done: reply briefly in the user's language (usually Russian): what the script does, its inputs, and any caveat. Do not paste the whole code in the reply — the app shows it and applies the last successful run_pine code to the chart automatically.`;
+When done: reply briefly in the user's language (the app passes the interface language: Russian, Uzbek or English): what the script does, its inputs, and any caveat. Do not paste the whole code in the reply — the app shows it and applies the last successful run_pine code to the chart automatically.`;
 
 const TOOLS = [
   {
@@ -980,6 +980,8 @@ async function agentTurnClaudeCode(body, emit) {
   const LEGACY = { chart: 'look', indicator: 'build', strategy: 'test', fix: 'code', screenshot: 'pic', brainstorm: 'ideas' };
   if (LEGACY[body.mode]) body.mode = LEGACY[body.mode];
   if (MODES[body.mode]) ctxLines.push(`[Mode: ${MODES[body.mode]}]`);
+  const LANG_NAME = { en: 'English', uz: "Uzbek (Latin script, O'zbekcha)", ru: 'Russian' };
+  if (LANG_NAME[body.lang]) ctxLines.push(`[Interface language: ${LANG_NAME[body.lang]} — reply in this language unless the user writes in another one]`);
   const imgs = saveImages(body.images);
   if (imgs.length) ctxLines.push(`[Attached images — open each with the Read tool before answering: ${imgs.join(', ')}]`);
   const prompt = `${ctxLines.join('\n')}\n\n${String(body.text || '').slice(0, 40000)}`;
@@ -1344,7 +1346,7 @@ async function health({ force = false } = {}) {
   } else {
     const au = claudeAuth(), key = claudeKey();
     cl.auth = { mode: au.mode, key: maskKey(key), keySource: au.key ? 'settings' : key ? 'environment' : '' };
-    cl.details.push(['Версия', cv.version], ['Путь', maskPII(CFG.claudeBin)], ['Вход', au.mode === 'apikey' ? (key ? `свой API-ключ ${maskKey(key)}` : 'API-ключ не задан') : 'подписка Claude']);
+    cl.details.push(['Версия', cv.version], ['Путь', maskPII(CFG.claudeBin)], ['Способ входа', au.mode === 'apikey' ? (key ? `свой API-ключ ${maskKey(key)}` : 'API-ключ не задан') : 'подписка Claude']);
     const test = HC.test, lastErrNewer = AG.lastErr && AG.lastErrAt > AG.lastOk;
     if (test && !test.ok && test.t >= AG.lastOk) Object.assign(cl, { state: 'err', summary: test.summary, hint: test.hint }), cl.details.push(['Ответ', maskPII(test.raw).slice(0, 300)]);
     else if (lastErrNewer) { const c = classifyClaudeErr(AG.lastErr); Object.assign(cl, { state: 'err', summary: c.summary, hint: c.hint }); cl.details.push(['Последняя ошибка', `${maskPII(AG.lastErr).slice(0, 300)} (${ago(AG.lastErrAt)})`]); }
@@ -1541,6 +1543,8 @@ const STATIC = {
   '/watch.js': ['public/watch.js', 'text/javascript; charset=utf-8'],
   '/library.js': ['public/library.js', 'text/javascript; charset=utf-8'],
   '/settings.js': ['public/settings.js', 'text/javascript; charset=utf-8'],
+  '/i18n.js': ['public/i18n.js', 'text/javascript; charset=utf-8'],
+  '/i18n-dict.js': ['public/i18n-dict.js', 'text/javascript; charset=utf-8'],
   '/style.css': ['public/style.css', 'text/css; charset=utf-8'],
   '/vendor/lwc.js': ['node_modules/lightweight-charts/dist/lightweight-charts.standalone.production.js', 'text/javascript; charset=utf-8'],
 };

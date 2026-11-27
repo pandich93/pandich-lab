@@ -783,9 +783,10 @@ setInterval(() => { if (!$('prompt').value && document.activeElement !== $('prom
 
 async function useExample(it) {
   const t = TASKS[curTask];
-  if (t.prefix) { const p = $('prompt'); p.value = it.text + '\n'; p.focus(); p.setSelectionRange(p.value.length, p.value.length); autoGrow(); return; }
-  if (t.needImage && !S.attach.some(a => a.kind === 'image')) { S.pendingText = it.text; $('fileImg').click(); return; }
-  send(it.text, { snap: !!(it.snap || t.snap) });
+  const T = (window.QLI18n && window.QLI18n.t) || (x => x), text = T(it.text);
+  if (t.prefix) { const p = $('prompt'); p.value = text + '\n'; p.focus(); p.setSelectionRange(p.value.length, p.value.length); autoGrow(); return; }
+  if (t.needImage && !S.attach.some(a => a.kind === 'image')) { S.pendingText = text; $('fileImg').click(); return; }
+  send(text, { snap: !!(it.snap || t.snap) });
 }
 document.addEventListener('click', e => {
   if (!$('composer').contains(e.target)) $('plusMenu').classList.add('hidden');
@@ -889,7 +890,7 @@ async function applyAgentScript(targetRef, name, code, result) {
 async function send(text, opts = {}) {
   text = (text || '').trim();
   if ((!text && !S.attach.length) || S.busy) return;
-  if (!text) text = curTask === 'pic' ? 'Собери похожий индикатор по этой картинке' : 'Посмотри на вложение';
+  if (!text) text = ((window.QLI18n && window.QLI18n.t) || (x => x))(curTask === 'pic' ? 'Собери похожий индикатор по этой картинке' : 'Посмотри на вложение');
   const atts = S.attach.slice(); S.attach = []; renderAttach();
   if ((opts.snap || TASKS[curTask].snap) && !atts.some(a => a.chart)) { try { atts.unshift({ kind: 'image', label: `${S.symbol} ${S.interval}`, dataUrl: chartSnapshot(), chart: true }); } catch (e) { log('snapshot: ' + e.message); } }
   $('prompt').value = ''; autoGrow();
@@ -906,7 +907,7 @@ async function send(text, opts = {}) {
   try {
     const r = await fetch('/api/chat', {
       method: 'POST', headers: { 'content-type': 'application/json' }, signal: ctrl.signal,
-      body: JSON.stringify({ sessionId: S.sessionId, text: fullText, mode: curTask, model: $('modelSel').value, symbol: S.symbol, interval: S.interval, limit: S.limit,
+      body: JSON.stringify({ sessionId: S.sessionId, text: fullText, mode: curTask, lang: (window.QLI18n && window.QLI18n.lang) || 'ru', model: $('modelSel').value, symbol: S.symbol, interval: S.interval, limit: S.limit,
         activeScript: active ? { name: active.name, code: active.code } : null,
         images: atts.filter(a => a.kind === 'image').map(a => ({ label: a.chart ? `snapshot of the user's chart ${S.symbol} ${S.interval}` : a.label, dataUrl: a.dataUrl })),
         chartState: { scripts: S.scripts.map(s => ({ name: s.name, visible: s.visible })), drawings: drawings.slice(0, 60) } }),

@@ -5,26 +5,31 @@ const $ = id => document.getElementById(id);
 const api = window.setup;
 const WIN = api.platform === 'win32', MAC = api.platform === 'darwin';
 const logBox = $('logBox');
+// texts: Русский key → current language (i18n-desktop.js); step messages are stored as keys and translated at render time
+const L10N = window.PLI18N;
+let LANG = 'ru', tr = L10N.make(LANG);
+const M = (k, ...a) => ({ k, a });
+const txt = m => !m ? '' : typeof m === 'object' ? tr(m.k, ...m.a.map(x => (x && typeof x === 'object') ? txt(x) : x)) : tr(m);
 function logLine(l) { logBox.textContent += l + '\n'; logBox.scrollTop = logBox.scrollHeight; }
 api.onLog(logLine);
-$('logT').onclick = () => { const v = logBox.style.display === 'block'; logBox.style.display = v ? 'none' : 'block'; $('logT').textContent = (v ? '▸' : '▾') + ' Подробный журнал'; };
+$('logT').onclick = () => { const v = logBox.style.display === 'block'; logBox.style.display = v ? 'none' : 'block'; $('logT').textContent = (v ? '▸' : '▾') + ' ' + tr('Подробный журнал'); };
 
 const S = { st: null, state: {}, msg: {}, bad: {}, running: false, loginTimer: null, loginUntil: 0 };
 const mt5On = () => WIN && $('mt5').checked;
 
 const STEPS = [
   { id: 'claude', title: 'Claude Code', desc: 'Программа, через которую работает Panda (официальный установщик Anthropic).',
-    done: st => !!st.claude.path, info: st => st.claude.path ? `Установлен${st.claude.version ? ' · ' + st.claude.version : ''}` : '',
-    run: async () => { logLine('▶ Claude Code'); const r = await api.installClaude(); S.st = r.status; return r.ok && !!r.status.claude.path ? '' : 'Установщик завершился с ошибкой — откройте журнал ниже.'; } },
+    done: st => !!st.claude.path, info: st => st.claude.path ? tr('Установлен') + (st.claude.version ? ' · ' + st.claude.version : '') : '',
+    run: async () => { logLine('▶ Claude Code'); const r = await api.installClaude(); S.st = r.status; return r.ok && !!r.status.claude.path ? '' : M('Установщик завершился с ошибкой — откройте журнал ниже.'); } },
   { id: 'git', win: true, title: 'Git Bash', desc: 'Нужен Panda, чтобы запускать код на графике (PortableGit, ~60 МБ).',
-    done: st => !!st.git, info: st => st.git ? 'Найден' : '',
-    run: async () => { logLine('▶ Git Bash (PortableGit)'); const r = await api.installGit(); S.st = r.status; if (r.out) logLine(r.out); return r.ok ? '' : `Не удалось: ${r.error || 'ошибка'}`; } },
+    done: st => !!st.git, info: st => st.git ? tr('Найден') : '',
+    run: async () => { logLine('▶ Git Bash (PortableGit)'); const r = await api.installGit(); S.st = r.status; if (r.out) logLine(r.out); return r.ok ? '' : M('Не удалось: {0}', r.error || M('ошибка')); } },
   { id: 'python', win: true, mt5: true, title: 'Python 3', desc: 'Нужен для связи с MetaTrader 5 (python.org, ~30 МБ).',
-    done: st => !!(st.python && st.python.cmd), info: st => st.python && st.python.cmd ? `Python ${st.python.version}` : (st.python && st.python.found ? `Найден неподходящий (${st.python.found.unsuitable}) — поставим 3.13` : ''),
-    run: async () => { logLine('▶ Python 3.13'); const r = await api.installPython(); S.st = r.status; return r.ok ? '' : (r.error || 'Ошибка установки'); } },
+    done: st => !!(st.python && st.python.cmd), info: st => st.python && st.python.cmd ? `Python ${st.python.version}` : (st.python && st.python.found ? tr('Найден неподходящий ({0}) — поставим 3.13', st.python.found.unsuitable) : ''),
+    run: async () => { logLine('▶ Python 3.13'); const r = await api.installPython(); S.st = r.status; return r.ok ? '' : (r.error || M('Ошибка установки')); } },
   { id: 'mt5mod', win: true, mt5: true, title: 'Модуль MetaTrader5', desc: 'Официальный пакет MetaQuotes для Python.',
-    done: st => !!(st.python && st.python.mt5), info: st => st.python && st.python.mt5 ? 'Установлен. Запустите терминал MT5 и войдите в счёт.' : '',
-    run: async () => { logLine('▶ pip install MetaTrader5'); const r = await api.installMT5(); S.st = r.status; return r.ok ? '' : (r.error || 'pip завершился с ошибкой — откройте журнал.'); } },
+    done: st => !!(st.python && st.python.mt5), info: st => st.python && st.python.mt5 ? tr('Установлен. Запустите терминал MT5 и войдите в счёт.') : '',
+    run: async () => { logLine('▶ pip install MetaTrader5'); const r = await api.installMT5(); S.st = r.status; return r.ok ? '' : (r.error || M('pip завершился с ошибкой — откройте журнал.')); } },
   { id: 'login', title: 'Вход в аккаунт Claude', desc: 'Panda работает от вашей подписки Claude (Pro или Max). Ключ API не нужен.',
     done: () => S.state.login === 'ok', info: () => '', run: () => startLogin() },
 ];
@@ -36,21 +41,21 @@ function render() {
   $('steps').innerHTML = visible().map((s, i) => {
     const off = s.mt5 && !mt5On();
     const state = off ? 'skip' : (S.state[s.id] || 'todo');
-    const det = off ? 'Пропущено — MetaTrader 5 не подключаем.' : (S.msg[s.id] || (st && s.info(st)) || s.desc);
+    const det = off ? tr('Пропущено — MetaTrader 5 не подключаем.') : (txt(S.msg[s.id]) || (st && s.info(st)) || tr(s.desc));
     let btn = '';
     if (!S.running && !off) {
-      if (state === 'err') btn = `<button data-run="${s.id}">Повторить</button>`;
-      else if (state === 'todo') btn = `<button data-run="${s.id}">${s.id === 'login' ? 'Войти' : 'Установить'}</button>`;
+      if (state === 'err') btn = `<button data-run="${s.id}">${tr('Повторить')}</button>`;
+      else if (state === 'todo') btn = `<button data-run="${s.id}">${tr(s.id === 'login' ? 'Войти' : 'Установить')}</button>`;
     }
-    if (s.id === 'login' && state === 'wait') btn = `<button data-check="1">Проверить сейчас</button><button data-reopen="1">Окно входа</button>`;
-    return `<div class="step"><span class="ic ${state}">${icon(state) || (i + 1)}</span><div class="body"><div class="ttl">${s.title}</div><div class="det${S.bad[s.id] ? ' bad' : ''}">${det}</div></div><div class="act">${btn}</div></div>`;
+    if (s.id === 'login' && state === 'wait') btn = `<button data-check="1">${tr('Проверить сейчас')}</button><button data-reopen="1">${tr('Окно входа')}</button>`;
+    return `<div class="step"><span class="ic ${state}">${icon(state) || (i + 1)}</span><div class="body"><div class="ttl">${tr(s.title)}</div><div class="det${S.bad[s.id] ? ' bad' : ''}">${det}</div></div><div class="act">${btn}</div></div>`;
   }).join('');
   $('steps').querySelectorAll('[data-run]').forEach(b => { b.onclick = () => runOne(b.dataset.run); });
   $('steps').querySelectorAll('[data-check]').forEach(b => { b.onclick = () => checkLogin(true); });
   $('steps').querySelectorAll('[data-reopen]').forEach(b => { b.onclick = () => api.loginClaude(); });
   const need = visible().filter(s => !(s.mt5 && !mt5On()) && S.state[s.id] !== 'ok');
   $('all').disabled = S.running || !need.length;
-  $('all').textContent = S.running ? 'Устанавливаю…' : need.length ? 'Установить всё' : '✓ Всё готово';
+  $('all').textContent = tr(S.running ? 'Устанавливаю…' : need.length ? 'Установить всё' : '✓ Всё готово');
   $('finish').className = need.length ? '' : 'primary';
   $('mt5Opt').style.display = WIN ? '' : 'none';
 }
@@ -92,8 +97,8 @@ async function startLogin() {
   const r = await api.loginClaude();
   if (!r.ok) { S.state.login = 'err'; S.msg.login = r.error || 'Не удалось открыть окно входа'; S.bad.login = true; return; }
   S.state.login = 'wait'; S.bad.login = false;
-  S.msg.login = (MAC ? 'Открыт «Терминал» с Claude Code (если macOS спросит разрешение — нажмите «OK»). ' : 'Открыто окно Claude Code. ')
-    + 'Выберите вход через подписку Claude и подтвердите в браузере. Если спросит тему оформления или доверие к папке — просто нажмите Enter. Мы сами заметим, когда вход выполнен.';
+  S.msg.login = M('{0}{1}', M(MAC ? 'Открыт «Терминал» с Claude Code (если macOS спросит разрешение — нажмите «OK»). ' : 'Открыто окно Claude Code. '),
+    M('Выберите вход через подписку Claude и подтвердите в браузере. Если спросит тему оформления или доверие к папке — просто нажмите Enter. Мы сами заметим, когда вход выполнен.'));
   S.loginUntil = Date.now() + 15 * 60000;
   clearInterval(S.loginTimer); S.loginTimer = setInterval(() => checkLogin(false), 12000);
   render();
@@ -108,18 +113,28 @@ async function checkLogin(manual) {
     clearInterval(S.loginTimer); S.state.login = 'ok'; S.bad.login = false;
     S.msg.login = 'Вход выполнен — Panda отвечает. Окно Claude Code можно закрыть.'; logLine('✓ Claude: вход выполнен'); render(); return;
   }
-  if (S.state.login === 'wait' && Date.now() > S.loginUntil) { clearInterval(S.loginTimer); S.state.login = 'err'; S.bad.login = true; S.msg.login = `Вход не обнаружен: ${t.summary || 'ошибка'}. Нажмите «Повторить».`; }
-  else if (manual) S.msg.login = `Пока не вошли (${t.summary || 'нет ответа'}). Завершите вход в окне Claude Code — проверка повторяется автоматически.`;
+  if (S.state.login === 'wait' && Date.now() > S.loginUntil) { clearInterval(S.loginTimer); S.state.login = 'err'; S.bad.login = true; S.msg.login = M('Вход не обнаружен: {0}. Нажмите «Повторить».', t.summary || M('ошибка')); }
+  else if (manual) S.msg.login = M('Пока не вошли ({0}). Завершите вход в окне Claude Code — проверка повторяется автоматически.', t.summary || M('нет ответа'));
   render();
 }
 
 $('mt5').onchange = render;
 $('finish').onclick = () => { clearInterval(S.loginTimer); api.finish({ autostart: $('auto').checked }); };
-if (MAC) $('heroTxt').textContent = 'Скачаем и поставим Claude Code с официального сайта Anthropic. Вам останется только войти в аккаунт Claude в браузере.';
+// ── language: picker in the corner; static texts carry data-t="<Russian key>"
+function applyLang() {
+  document.documentElement.lang = LANG;
+  document.querySelectorAll('[data-t]').forEach(el => { el.textContent = tr(el.dataset.t); });
+  $('heroTxt').textContent = tr(MAC ? 'Скачаем и поставим Claude Code с официального сайта Anthropic. Вам останется только войти в аккаунт Claude в браузере.' : 'Скачаем и поставим всё нужное с официальных сайтов, без прав администратора. Вам останется только войти в аккаунт Claude в браузере.');
+  $('logT').textContent = (logBox.style.display === 'block' ? '▾' : '▸') + ' ' + tr('Подробный журнал');
+  document.title = tr('Pandich Lab — настройка');
+  $('langs').innerHTML = Object.entries(L10N.LANGS).map(([k, n]) => `<button data-lang="${k}" class="${k === LANG ? 'on' : ''}">${n}</button>`).join('');
+  $('langs').querySelectorAll('[data-lang]').forEach(b => { b.onclick = async () => { LANG = await api.setLang(b.dataset.lang) || b.dataset.lang; tr = L10N.make(LANG); applyLang(); render(); }; });
+}
 
 (async () => {
   render();
-  applyStatus(await api.status()); render();
+  const st0 = await api.status(); LANG = st0.lang || 'ru'; tr = L10N.make(LANG); applyLang();
+  applyStatus(st0); render();
   // already signed in? (fast fail when not — costs nothing)
   if (S.st.claude.path) { const t = await api.testClaude().catch(() => ({ ok: false })); if (t.ok) { S.state.login = 'ok'; S.msg.login = 'Вход уже выполнен.'; render(); } }
 })();

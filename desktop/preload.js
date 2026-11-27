@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('setup', {
   installPython: () => ipcRenderer.invoke('setup:installPython'),
   testClaude: () => ipcRenderer.invoke('setup:testClaude'),
   installGit: () => ipcRenderer.invoke('setup:installGit'),
+  setLang: l => ipcRenderer.invoke('setup:setLang', l),
   platform: process.platform,
   setClaudePath: p => ipcRenderer.invoke('setup:setClaudePath', p),
   openUrl: u => ipcRenderer.invoke('setup:openUrl', u),

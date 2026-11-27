@@ -8,6 +8,8 @@
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;padding:24px 28px}
   h1{font-size:20px;margin:0 0 4px}
+  .top{display:flex;align-items:flex-start;gap:12px}.top>div{flex:1}
+  .langs{display:flex;gap:4px;flex:none}.langs button{padding:4px 9px;font-size:12px}.langs button.on{border-color:var(--blue);color:#fff;background:rgba(41,98,255,.2)}
   .sub{color:var(--muted);margin-bottom:16px}
   .hero{display:flex;align-items:center;gap:14px;border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:14px 16px;margin-bottom:12px}
   .hero .txt{flex:1;color:var(--muted);font-size:12.5px}
@@ -41,25 +43,27 @@
 </style>
 </head>
 <body>
-  <h1>Добро пожаловать в Pandich Lab</h1>
-  <div class="sub">Графики и индикаторы уже работают. Чтобы заработал ИИ-ассистент Panda, нужно поставить пару программ — сделаем это за вас.</div>
+  <div class="top"><div><h1 data-t="Добро пожаловать в Pandich Lab">Добро пожаловать в Pandich Lab</h1>
+  <div class="sub" data-t="Графики и индикаторы уже работают. Чтобы заработал ИИ-ассистент Panda, нужно поставить пару программ — сделаем это за вас.">Графики и индикаторы уже работают. Чтобы заработал ИИ-ассистент Panda, нужно поставить пару программ — сделаем это за вас.</div></div>
+  <div class="langs" id="langs" title="Язык / Til / Language"></div></div>
 
   <div class="hero">
-    <div class="txt"><b>Установить всё одним кликом</b><span id="heroTxt">Скачаем и поставим всё нужное с официальных сайтов, без прав администратора. Вам останется только войти в аккаунт Claude в браузере.</span></div>
+    <div class="txt"><b data-t="Установить всё одним кликом">Установить всё одним кликом</b><span id="heroTxt">Скачаем и поставим всё нужное с официальных сайтов, без прав администратора. Вам останется только войти в аккаунт Claude в браузере.</span></div>
     <button id="all" class="primary big">Установить всё</button>
   </div>
 
   <div class="steps" id="steps"></div>
-  <label class="opt" id="mt5Opt"><input type="checkbox" id="mt5" checked> Подключить MetaTrader 5 (котировки вашего брокера; можно пропустить — будут графики Binance)</label>
+  <label class="opt" id="mt5Opt"><input type="checkbox" id="mt5" checked> <span data-t="Подключить MetaTrader 5 (котировки вашего брокера; можно пропустить — будут графики Binance)">Подключить MetaTrader 5 (котировки вашего брокера; можно пропустить — будут графики Binance)</span></label>
 
   <span class="logt" id="logT">▸ Подробный журнал</span>
   <pre id="logBox"></pre>
 
   <div class="foot">
-    <label><input type="checkbox" id="auto"> Запускать вместе с системой (в фоне, для сигналов Watch)</label>
+    <label><input type="checkbox" id="auto"> <span data-t="Запускать вместе с системой (в фоне, для сигналов Watch)">Запускать вместе с системой (в фоне, для сигналов Watch)</span></label>
     <div class="spacer"></div>
-    <button id="finish">Открыть Pandich Lab</button>
+    <button id="finish" data-t="Открыть Pandich Lab">Открыть Pandich Lab</button>
   </div>
+<script src="i18n-desktop.js"></script>
 <script src="setup.js"></script>
 </body>
 </html>
