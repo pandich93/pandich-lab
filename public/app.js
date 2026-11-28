@@ -838,6 +838,7 @@ const PI = { // panel icons (18×18)
   strategy: '<svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="9" cy="9" r="6.5"/><path d="M9 1v3.5M9 13.5V17M1 9h3.5M13.5 9H17"/></svg>',
   fix: '<svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 2.5a3.5 3.5 0 00-3.3 4.6L2.5 12.8a1.4 1.4 0 002 2l5.7-5.7a3.5 3.5 0 004.6-3.3l-2 .9-1.9-1.9z"/></svg>',
   screenshot: '<svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="14" height="12" rx="2"/><circle cx="6.5" cy="7" r="1.3"/><path d="M16 12l-4-4-7 7"/></svg>',
+  research: '<svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2h4M7.5 2v5L3.5 14a1.3 1.3 0 001.1 2h8.8a1.3 1.3 0 001.1-2L10.5 7V2"/><path d="M5.2 11h7.6"/></svg>',
   brainstorm: '<svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 13.5h5M7 16h4M9 2a5 5 0 00-3 9c.6.5 1 1.2 1 2h4c0-.8.4-1.5 1-2a5 5 0 00-3-9z"/></svg>',
   image: '<svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="14" height="12" rx="2"/><circle cx="6.5" cy="7" r="1.3"/><path d="M16 12l-4-4-7 7"/></svg>',
   code: '<svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 5L2 9l4 4M12 5l4 4-4 4"/></svg>',
@@ -889,10 +890,15 @@ const TASKS = {
     'Собери похожий индикатор по этому скриншоту',
     'Что за инструмент на картинке и как он, скорее всего, считается?'],
     ph: ['Приложите картинку (＋ или Ctrl+V) и напишите, что повторить'] },
+  research: { name: 'Исследование', icon: 'research', ex: [
+    'Найди идею входа на этом символе и таймфрейме: 3–5 разных логик, каждую проверь честно',
+    'Есть ли перевес у пробоя азиатского диапазона по сравнению с откатом к EMA? Проверь обе идеи',
+    'Исследуй, работает ли возврат к VWAP внутри дня на золоте'],
+    ph: ['Опишите цель исследования — Panda сформулирует несколько идей и проверит каждую', 'Например: найди логику входа с перевесом на XAUUSD H1'] },
   ideas: { name: 'Идеи', icon: 'brainstorm', ideas: true, ex: [],
     ph: ['Например: какие инструменты помогут торговать золото внутри дня?'] },
 };
-const TASK_ORDER = ['look', 'build', 'test', 'alert', 'code', 'pic', 'ideas'];
+const TASK_ORDER = ['look', 'build', 'test', 'research', 'alert', 'code', 'pic', 'ideas'];
 const LEGACY_TASK = { chart: 'look', indicator: 'build', strategy: 'test', fix: 'code', screenshot: 'pic', brainstorm: 'ideas' };
 let curTask = store.get('ql.task', 'build'); if (!TASKS[curTask]) curTask = 'build';
 let ideasOffset = 0, phIdx = 0, examplesOpen = true;
@@ -1098,6 +1104,7 @@ async function send(text, opts = {}) {
         }
         else if (ev.type === 'preview' || ev.type === 'script') await applyAgentScript(target, ev.name, ev.code, ev.result);
         else if (ev.type === 'chart') await setChart(ev.symbol, ev.interval);
+        else if (ev.type === 'research' && window.QLValidate) { const c = window.QLValidate.researchCard(ev.research); if (!c.isConnected) msgs.insertBefore(c, statusEl); }
         else if (ev.type === 'validation' && window.QLValidate) msgs.insertBefore(window.QLValidate.chatCard(ev.report, target.id ? S.scripts.find(x => x.id === target.id) : null), statusEl);
         else if (ev.type === 'draw' && window.QLDraw) { for (const it of ev.items) window.QLDraw.add(it.type, it.pts, it.style); }
         else if (ev.type === 'draw-clear' && window.QLDraw) window.QLDraw.removeAgent();

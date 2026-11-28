@@ -8,6 +8,9 @@
 //   node ql.mjs draw-clear                    remove drawings previously made by Panda
 //   node ql.mjs validate --file spec.json     honest grid validation of a strategy (region, deflated Sharpe, walk-forward, Monte Carlo, verdict)
 //   node ql.mjs validate-status <job id>      wait for a validation that is still running
+//   node ql.mjs research-plan --file plan.json  register research ideas (frozen before testing)
+//   node ql.mjs research-skip <id> <reason>   mark an idea as not testable / skipped
+//   node ql.mjs research-summary              table idea → verdict for the current research
 // Env (set by server when it spawns claude): QL_PORT, QL_SID
 import fs from 'node:fs';
 import path from 'node:path';
@@ -41,12 +44,20 @@ try {
     let spec; try { spec = JSON.parse(raw); } catch (e) { console.log(`ERROR: invalid JSON: ${e.message}`); process.exit(1); }
     if (spec.file) { spec.code = fs.readFileSync(path.resolve(spec.file), 'utf8'); delete spec.file; }
     out(await post('/api/agent/validate', { spec }));
+  } else if (cmd === 'research-plan' && rest[0]) {
+    const raw = rest[0] === '--file' ? fs.readFileSync(path.resolve(rest[1]), 'utf8') : rest.join(' ');
+    let plan; try { plan = JSON.parse(raw); } catch (e) { console.log(`ERROR: invalid JSON: ${e.message}`); process.exit(1); }
+    out(await post('/api/agent/research-plan', { plan }));
+  } else if (cmd === 'research-skip' && rest[0]) {
+    out(await post('/api/agent/research-skip', { id: rest[0], reason: rest.slice(1).join(' ') }));
+  } else if (cmd === 'research-summary') {
+    out(await post('/api/agent/research-summary', {}));
   } else if (cmd === 'validate-status' && rest[0]) {
     out(await post('/api/agent/validate-status', { id: rest[0] }));
   } else if (cmd === 'draw-clear') {
     out(await post('/api/agent/draw-clear', {}));
   } else {
-    console.log('Usage: node ql.mjs run <file.pine> | chart <SYMBOL> [tf] | context | bars <tf> [n] [SYMBOL] | draw \'<json>\' | draw --file f.json | draw-clear | validate --file spec.json | validate-status <id>');
+    console.log('Usage: node ql.mjs run <file.pine> | chart <SYMBOL> [tf] | context | bars <tf> [n] [SYMBOL] | draw \'<json>\' | draw --file f.json | draw-clear | validate --file spec.json | validate-status <id> | research-plan --file plan.json | research-skip <id> <reason> | research-summary');
     process.exit(2);
   }
 } catch (e) {

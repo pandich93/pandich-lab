@@ -733,14 +733,67 @@ async function runValidation(job, spec) {
   else costs = { spread: Math.max(0, Number(c.spread) || 0), spreadAt: null, source: 'заданы вручную' };
   Object.assign(costs, { slip: Math.max(0, Number(c.slip) || 0), commPct: Math.max(0, Number(c.commPct) || 0) });
   const days = [...new Set(bars.map(b => Math.floor(b.openTime / 86400000)))];
-  const all = loadTrials(), key = trialsKey(code), prev = all[key] || { trials: 0, runs: [] }, before = trialsOf(all, key);
+  const all = loadTrials(), key = trialsKey(code), prev = all[key] || { trials: 0, runs: [] };
+  // inside a research session the deflation counts every idea tested so far + this strategy's own earlier runs outside the session
+  const rs = spec.research ? rsLoad(spec.research) : null;
+  const before = rs ? rs.trials + Math.max(0, trialsOf(all, key) - (rs.byTitle[key] || 0)) : trialsOf(all, key);
   const report = buildReport({ axes: spec.axes, cells, costs, trialsBefore: before, minTrades: 10,
     bars: { from: Math.floor(bars[0].openTime / 1000), to: Math.floor(bars[bars.length - 1].closeTime / 1000), days, ann: annFor(src), capital: capital || 10000, count: bars.length } });
   report.meta = { title: title || pineTitle(code), symbol, interval, src, broker: src === 'mt5' ? (MT5.info?.server || '') : src, baseInputs: base, prevTrials: before, barsRequested: wantBars, ms: Date.now() - job.startedAt, at: new Date().toISOString() };
   prev.trials += job.total; prev.runs = [...(prev.runs || []), { at: report.meta.at, symbol, interval, cells: job.total, verdict: report.verdict.code }].slice(-50);
   all[key] = prev; try { fs.writeFileSync(VAL_TRIALS_FILE, JSON.stringify(all, null, 1)); } catch { /* read-only — counter stays in memory for this run */ }
-  job.report = report; job.state = 'done'; job.onProgress && job.onProgress(job);
+  job.report = report;
+  if (rs && spec.idea) rsRecord(rs, rsSafe(spec.idea), { ...job, report }, key);
+  job.state = 'done'; job.onProgress && job.onProgress(job);
 }
+// ───────── research sessions: several entry ideas, each formulated BEFORE testing, one shared trial count ─────────
+const RESEARCH_DIR = path.join(DATA_DIR, 'research'); fs.mkdirSync(RESEARCH_DIR, { recursive: true });
+const RS = new Map();
+function rsLoad(id) {
+  if (RS.has(id)) return RS.get(id);
+  try { const r = JSON.parse(fs.readFileSync(path.join(RESEARCH_DIR, `${id}.json`), 'utf8')); RS.set(id, r); return r; } catch { return null; }
+}
+const rsSave = r => { r.updated = Date.now(); try { fs.writeFileSync(path.join(RESEARCH_DIR, `${r.id}.json`), JSON.stringify(r, null, 1)); } catch (e) { console.log(`research: cannot save: ${e.message}`); } };
+const rsSafe = x => String(x || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
+function rsList() {
+  let files = []; try { files = fs.readdirSync(RESEARCH_DIR).filter(f => /^r[a-z0-9]+\.json$/.test(f)); } catch { /* none */ }
+  return files.map(f => rsLoad(f.slice(0, -5))).filter(Boolean).sort((a, b) => b.created - a.created).slice(0, 50)
+    .map(r => ({ id: r.id, created: r.created, goal: r.goal, symbol: r.symbol, interval: r.interval, ideas: r.ideas.length, done: r.ideas.filter(i => i.status === 'done').length, best: r.ideas.reduce((m, i) => (i.verdict && ['forward', 'check'].includes(i.verdict.code) ? m + 1 : m), 0), trials: r.trials }));
+}
+const TESTABLE = { yes: 'yes', not_yet: 'not_yet', no: 'no' };
+function rsIdea(x, k) {
+  return { id: rsSafe(x.id) || `I${k + 1}`, name: String(x.name || x.title || `Идея ${k + 1}`).slice(0, 120), mechanism: String(x.mechanism || '').slice(0, 600), entry: String(x.entry || '').slice(0, 600),
+    exit: String(x.exit || '').slice(0, 400), refute: String(x.refute || x.refutation || '').slice(0, 400), testable: TESTABLE[x.testable] || 'yes', note: String(x.note || '').slice(0, 300),
+    status: TESTABLE[x.testable] && x.testable !== 'yes' ? 'skipped' : 'planned', verdict: null, metrics: null, title: '', job: null };
+}
+// a finished validation inside a research session → store the report and the idea's key numbers
+function rsRecord(r, ideaId, job, title) {
+  const it = r.ideas.find(i => i.id === ideaId); if (!it) return;
+  const rep = job.report, R = rep.region;
+  try { fs.writeFileSync(path.join(RESEARCH_DIR, `${r.id}__${it.id}.json`), JSON.stringify(rep)); } catch { /* disk */ }
+  it.status = 'done'; it.title = title; it.job = job.id; it.verdict = { code: rep.verdict.code, title: rep.verdict.title };
+  it.metrics = { cells: rep.grid.total, trials: rep.trials, bars: rep.bars.count, regionMean: R ? R.mean : null, regionSE: R ? R.se : null, regionSize: R ? R.size : 0,
+    dsr: rep.dsr ? rep.dsr.deflated : null, dsrP: rep.dsr ? rep.dsr.prob : null, wfOOS: rep.wf.oosSharpe, wfe: rep.wf.wfe, posFolds: `${rep.wf.posFolds}/${rep.wf.n}`,
+    trades: rep.center ? rep.center.n : 0, net: rep.center ? rep.center.net : null, pf: rep.center ? rep.center.pf : null, center: R ? R.center : null,
+    gatesFailed: rep.gates.filter(g => g.status === 'fail').map(g => g.label), gatesWarn: rep.gates.filter(g => g.status === 'warn').map(g => g.label) };
+  r.trials += job.total; r.byTitle[title] = (r.byTitle[title] || 0) + job.total;
+  rsSave(r);
+}
+function rsSummary(r) {
+  const f = (x, d = 2) => (Number.isFinite(x) ? x.toFixed(d) : '—'), L = [];
+  L.push(`RESEARCH ${r.id}: "${r.goal}" on ${r.symbol} ${r.interval}; total trials across all ideas: ${r.trials}`);
+  L.push('id | idea | status | verdict | region Sharpe ± SE | deflated (p) | WF OOS Sharpe, WFE, +folds | trades centre | PF');
+  for (const i of r.ideas) {
+    const m = i.metrics || {};
+    L.push(`${i.id} | ${i.name} | ${i.status}${i.status === 'skipped' ? ` (${i.testable}${i.note ? ': ' + i.note : ''})` : ''} | ${i.verdict ? i.verdict.title : '—'} | ${f(m.regionMean)} ± ${f(m.regionSE)} | ${f(m.dsr)} (${f((m.dsrP ?? NaN) * 100, 0)}%) | ${f(m.wfOOS)}, ${f(m.wfe)}, ${m.posFolds || '—'} | ${m.trades ?? '—'} | ${f(m.pf)}`);
+    if (i.refute) L.push(`   refutation set in advance: ${i.refute}`);
+  }
+  const ok = r.ideas.filter(i => i.verdict && i.verdict.code === 'forward'), chk = r.ideas.filter(i => i.verdict && i.verdict.code === 'check');
+  L.push(ok.length ? `Ideas with verdict FORWARD: ${ok.map(i => i.id).join(', ')}` : chk.length ? `No idea passed all gates; NEEDS CHECKS: ${chk.map(i => i.id).join(', ')}` : 'No idea shows a significant edge.');
+  L.push('Report honestly: every idea shares one trial count, so do not pick a winner by in-sample numbers. The app shows the table and each report.');
+  return L.join('\n');
+}
+
 const jobView = j => ({ id: j.id, state: j.state, done: j.done, total: j.total, error: j.error, elapsed: Date.now() - j.startedAt, report: j.state === 'done' ? j.report : undefined });
 // short text for Panda: the region, not the maximum
 function summarizeValidation(rep) {
@@ -1187,6 +1240,7 @@ async function agentTurnClaudeCode(body, emit) {
     code: 'fix / convert / explain the given Pine code',
     pic: 'rebuild what is shown on the attached image as Pine',
     ideas: 'suggest trading-tool ideas for this market (data-driven, concise list), then build one if asked',
+    research: 'RESEARCH: follow the "Research mode" section of your instructions — register 3–5 different entry ideas with research-plan BEFORE testing, then build + run + validate each with its idea id, finish with research-summary',
   };
   const LEGACY = { chart: 'look', indicator: 'build', strategy: 'test', fix: 'code', screenshot: 'pic', brainstorm: 'ideas' };
   if (LEGACY[body.mode]) body.mode = LEGACY[body.mode];
@@ -1224,7 +1278,7 @@ async function agentTurnClaudeCode(body, emit) {
       windowsHide: true,
       windowsVerbatimArguments: isWin,
     });
-    const timer = setTimeout(() => { child.kill(); reject(new Error('Claude Code: превышен таймаут')); }, CFG.agentTimeoutMs);
+    const timer = setTimeout(() => { child.kill(); reject(new Error('Claude Code: превышен таймаут')); }, body.mode === 'research' ? Math.max(CFG.agentTimeoutMs, 30 * 60 * 1000) : CFG.agentTimeoutMs);
     let buf = '', errBuf = '', finalResult = null;
     child.stdout.on('data', chunk => {
       buf += chunk.toString('utf8');
@@ -1868,6 +1922,12 @@ const server = http.createServer(async (req, res) => {
         crypto: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'PAXGUSDT'],
       });
     }
+    if (req.method === 'GET' && url.pathname === '/api/research') return sendJSON(res, 200, { ok: true, list: rsList() });
+    if (req.method === 'GET' && url.pathname.startsWith('/api/research/')) {
+      const [id, , idea] = url.pathname.slice(14).split('/').map(rsSafe);
+      if (idea) { try { return sendJSON(res, 200, { ok: true, report: JSON.parse(fs.readFileSync(path.join(RESEARCH_DIR, `${id}__${idea}.json`), 'utf8')) }); } catch { return sendJSON(res, 200, { ok: false, error: 'нет отчёта' }); } }
+      const r = rsLoad(id); return sendJSON(res, 200, r ? { ok: true, research: r } : { ok: false, error: 'нет такого исследования' });
+    }
     if (req.method === 'GET' && url.pathname === '/api/quotes') {
       try { return sendJSON(res, 200, { ok: true, quotes: await getQuotes(String(url.searchParams.get('symbols') || '').split(',')) }); }
       catch (e) { return sendJSON(res, 200, { ok: false, error: e.message }); }
@@ -2075,15 +2135,46 @@ const server = http.createServer(async (req, res) => {
         const d = await validationDefaults(st.chart.symbol, st.chart.interval);
         const costs = { ...d.suggest, ...(sp.costs || {}) };
         if (st.emit) st.emit({ type: 'status', text: `Проверяю стратегию: ${axes.reduce((p, a) => p * a.values.length, 1)} прогонов…` });
-        const job = startValidation({ code, symbol: st.chart.symbol, interval: st.chart.interval, bars: sp.bars || Math.min(d.maxBars, 10000), axes, costs, baseInputs: sp.baseInputs || {} },
+        const rs = st.research ? rsLoad(st.research) : null, idea = rs && sp.idea ? rs.ideas.find(i => i.id === rsSafe(sp.idea)) : null;
+        if (rs && sp.idea && !idea) throw new Error(`no idea "${sp.idea}" in research ${rs.id}: ${rs.ideas.map(i => i.id).join(', ')}`);
+        if (idea) { idea.status = 'running'; rsSave(rs); if (st.emit) st.emit({ type: 'research', research: rs }); }
+        const job = startValidation({ code, symbol: st.chart.symbol, interval: st.chart.interval, bars: sp.bars || Math.min(d.maxBars, 10000), axes, costs, baseInputs: sp.baseInputs || {}, research: idea ? rs.id : null, idea: idea ? idea.id : null },
           j => { if (st.emit && j.state === 'running') st.emit({ type: 'status', text: `Проверяю стратегию: ${j.done}/${j.total}…` }); });
         const t0 = Date.now();
         while (job.state === 'running' && Date.now() - t0 < 100000) await new Promise(r => setTimeout(r, 400));
         if (job.state === 'running') return sendJSON(res, 200, { ok: true, summary: `STILL RUNNING (${job.done}/${job.total}). Call: node ql.mjs validate-status ${job.id}` });
-        if (job.state !== 'done') return sendJSON(res, 200, { ok: false, error: job.error || job.state });
-        if (st.emit) st.emit({ type: 'validation', job: job.id, report: job.report, code });
+        if (job.state !== 'done') { if (idea) { idea.status = 'error'; idea.note = String(job.error || job.state).slice(0, 300); rsSave(rs); if (st.emit) st.emit({ type: 'research', research: rs }); } return sendJSON(res, 200, { ok: false, error: job.error || job.state }); }
+        if (idea) { if (st.emit) st.emit({ type: 'research', research: rsLoad(rs.id) }); }
+        else if (st.emit) st.emit({ type: 'validation', job: job.id, report: job.report, code });
         return sendJSON(res, 200, { ok: true, summary: summarizeValidation(job.report) });
       } catch (e) { return sendJSON(res, 200, { ok: false, error: e.message }); }
+    }
+    if (req.method === 'POST' && url.pathname === '/api/agent/research-plan') {
+      const b = await readBody(req); const st = liveFor(b.sid);
+      if (!st || !st.chart) return sendJSON(res, 200, { ok: false, error: 'no active chat session' });
+      const p = b.plan || {}, ideas = Array.isArray(p.ideas) ? p.ideas : [];
+      if (!ideas.length) return sendJSON(res, 200, { ok: false, error: 'plan.ideas is empty: give 3–5 ideas {id,name,mechanism,entry,exit,refute,testable}' });
+      let r = p.append && st.research ? rsLoad(st.research) : null;
+      if (r) { const used = new Set(r.ideas.map(i => i.id)); for (const [k, x] of ideas.entries()) { const it = rsIdea(x, r.ideas.length + k); if (used.has(it.id)) it.id = `I${r.ideas.length + k + 1}`; r.ideas.push(it); } }
+      else {
+        r = { id: 'r' + Date.now().toString(36), created: Date.now(), goal: String(p.goal || '').slice(0, 300), symbol: st.chart.symbol, interval: st.chart.interval, ideas: ideas.slice(0, 8).map(rsIdea), trials: 0, byTitle: {} };
+        const ids = new Set(); r.ideas.forEach((it, k) => { if (ids.has(it.id)) it.id = `I${k + 1}`; ids.add(it.id); });
+        RS.set(r.id, r); st.research = r.id;
+      }
+      rsSave(r); if (st.emit) st.emit({ type: 'research', research: r });
+      return sendJSON(res, 200, { ok: true, summary: `Research ${r.id} registered (frozen): ${r.ideas.map(i => `${i.id} ${i.name}${i.status === 'skipped' ? ' [skipped: ' + i.testable + ']' : ''}`).join('; ')}.\nNow for each planned idea: write work/<id>.pine with strategy("<id> <short name>", …), run it, then validate with "idea":"<id>" in the JSON. Finish with: node ql.mjs research-summary` });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/agent/research-skip') {
+      const b = await readBody(req); const st = liveFor(b.sid); const r = st && st.research ? rsLoad(st.research) : null;
+      const it = r && r.ideas.find(i => i.id === rsSafe(b.id)); if (!it) return sendJSON(res, 200, { ok: false, error: 'no such idea in the current research' });
+      it.status = 'skipped'; it.note = String(b.reason || '').slice(0, 300); rsSave(r); if (st.emit) st.emit({ type: 'research', research: r });
+      return sendJSON(res, 200, { ok: true, summary: `${it.id} skipped` });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/agent/research-summary') {
+      const b = await readBody(req); const st = liveFor(b.sid); const r = st && st.research ? rsLoad(st.research) : null;
+      if (!r) return sendJSON(res, 200, { ok: false, error: 'no research in this chat — start with research-plan' });
+      if (st.emit) st.emit({ type: 'research', research: r, final: true });
+      return sendJSON(res, 200, { ok: true, summary: rsSummary(r) });
     }
     if (req.method === 'POST' && url.pathname === '/api/agent/validate-status') {
       const b = await readBody(req); const st = liveFor(b.sid); const j = VJOBS.get(String(b.id || ''));

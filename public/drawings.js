@@ -792,6 +792,7 @@ function chartMenu(pt) {
   items.push('-');
   if (window.QLLibrary) items.push({ icon: 'ƒ', label: 'Индикаторы…', hint: '/', run: () => window.QLLibrary.open() });
   for (const sc of ((A.S && A.S.scripts) || []).slice(0, 8)) items.push({ icon: MI.gear, label: `Настройки: ${sc.name || 'Script'}`, run: () => A.openInputs(sc) });
+  if (window.QLValidate) items.push({ icon: '🔬', label: 'Исследования…', run: () => window.QLValidate.listResearch() });
   if (window.QLValidate) for (const sc of ((A.S && A.S.scripts) || []).filter(window.QLValidate.isStrategy).slice(0, 4)) items.push({ icon: '✓', label: `Проверить стратегию: ${sc.name || 'Script'}`, run: () => window.QLValidate.openSetup(sc) });
   items.push('-');
   const n = D.items.length;

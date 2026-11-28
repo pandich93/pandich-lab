@@ -223,5 +223,58 @@
     return el;
   }
 
-  window.QLValidate = { openSetup, showReport, chatCard, isStrategy };
+  // ───────── research sessions (several ideas, one shared trial count) ─────────
+  const ST = { planned: '○', running: '◐', done: '●', skipped: '–', error: '⚠' };
+  const verdictBadge = i => i.verdict ? `<span class="rs-v ${VERD[i.verdict.code] || ''}">${esc(i.verdict.title)}</span>` : `<span class="rs-v na">${esc(T({ planned: 'в плане', running: 'проверяю…', skipped: 'пропущена', error: 'ошибка' }[i.status] || i.status))}</span>`;
+  const rsRows = r => r.ideas.map(i => { const m = i.metrics || {}; return `<tr class="rs-r ${i.status}" data-i="${esc(i.id)}"><td class="rs-st">${ST[i.status] || ''}</td><td><b data-noi18n>${esc(i.id)}</b> <span data-noi18n>${esc(i.name)}</span></td><td>${verdictBadge(i)}</td><td data-noi18n>${m.regionMean != null ? `${f(m.regionMean)} ± ${f(m.regionSE)}` : '—'}</td><td data-noi18n>${m.wfOOS != null ? f(m.wfOOS) : '—'}</td></tr>`; }).join('');
+  async function openIdeaReport(r, id) {
+    const j = await fetch(`/api/research/${r.id}/report/${id}`).then(x => x.json()).catch(() => null);
+    if (j && j.ok) showReport(j.report, S.scripts.find(x => (x.result && x.result.title || x.name || '').startsWith(id + ' ')) || null);
+  }
+  const cards = new Map();
+  function researchCard(r) {
+    let el = cards.get(r.id);
+    if (!el || !el.isConnected) { el = document.createElement('div'); el.className = 'vd-card rs-card'; cards.set(r.id, el); }
+    el.innerHTML = `<div class="vd-ct">🔬 <span>Исследование</span>: <b data-noi18n>${esc(r.goal || '')}</b></div>
+      <div class="vd-cl" data-noi18n>${esc(r.symbol)} ${esc(r.interval)} · ${esc(T('идей'))} ${r.ideas.length} · ${esc(T('испытаний'))} ${r.trials}</div>
+      <table class="rs-tbl"><tr><th></th><th>Идея</th><th>Вердикт</th><th>Sharpe региона</th><th>WF OOS</th></tr>${rsRows(r)}</table>
+      <button class="st-chatbtn">Подробнее</button>`;
+    el.querySelectorAll('.rs-r.done').forEach(tr => { tr.onclick = () => openIdeaReport(r, tr.dataset.i); });
+    el.querySelector('button').onclick = () => showResearch(r.id);
+    return el;
+  }
+  async function showResearch(id) {
+    const j = await fetch('/api/research/' + id).then(x => x.json()).catch(() => null);
+    if (!j || !j.ok) { alert(j ? j.error : 'нет связи с сервером'); return; }
+    const r = j.research, { dlg, close } = overlay('vd-rep rs-dlg');
+    const field = (k, v) => v ? `<div class="rs-f"><span>${esc(k)}</span><div data-noi18n>${esc(v)}</div></div>` : '';
+    dlg.innerHTML = `<div class="ind-h"><b>🔬 <span data-noi18n>${esc(r.goal || '')}</span></b><button class="ind-x" title="Закрыть (Esc)">✕</button></div>
+      <div class="ind-b vd-b">
+        <div class="vd-meta" data-noi18n>${esc(r.symbol)} ${esc(r.interval)} · ${new Date(r.created).toISOString().slice(0, 16).replace('T', ' ')} UTC · ${esc(T('испытаний'))} ${r.trials}</div>
+        <div class="vd-hint">Идеи записаны до проверки, вместе с условием, которое их опровергает. У всех идей общий счётчик испытаний — выбирать «победителя» по цифрам на истории нельзя.</div>
+        <table class="rs-tbl big"><tr><th></th><th>Идея</th><th>Вердикт</th><th>Sharpe региона</th><th>WF OOS</th></tr>${rsRows(r)}</table>
+        ${r.ideas.map(i => { const m = i.metrics || {}; return `<div class="rs-idea"><div class="rs-ih"><b data-noi18n>${esc(i.id)} · ${esc(i.name)}</b>${verdictBadge(i)}</div>
+          ${field(T('Механизм'), i.mechanism)}${field(T('Вход'), i.entry)}${field(T('Выход'), i.exit)}${field(T('Что опровергает'), i.refute)}
+          ${i.testable !== 'yes' ? field(T('Тестируемость'), `${i.testable}${i.note ? ' — ' + i.note : ''}`) : i.note ? field(T('Заметка'), i.note) : ''}
+          ${i.metrics ? `<div class="rs-f"><span>${esc(T('Итог'))}</span><div data-noi18n>Sharpe ${f(m.regionMean)} ± ${f(m.regionSE)} · deflated ${f(m.dsr)} (p ${f((m.dsrP ?? NaN) * 100, 0)}%) · WF OOS ${f(m.wfOOS)}, ${m.posFolds} · ${esc(T('сделок'))} ${m.trades} · PF ${f(m.pf)} · ${esc(T('баров'))} ${m.bars}</div></div>
+          ${m.gatesFailed && m.gatesFailed.length ? `<div class="rs-f"><span>${esc(T('Провалено'))}</span><div>${m.gatesFailed.map(esc).join('; ')}</div></div>` : ''}
+          <button class="ind-btn rs-open" data-i="${esc(i.id)}">Открыть отчёт</button>` : ''}</div>`; }).join('')}
+      </div>
+      <div class="ind-f"><span class="sp"></span><button class="ind-btn pri" data-a="close">Закрыть</button></div>`;
+    dlg.querySelector('.ind-x').onclick = close; dlg.querySelector('[data-a="close"]').onclick = close;
+    dlg.querySelectorAll('.rs-open').forEach(b => { b.onclick = () => openIdeaReport(r, b.dataset.i); });
+    dlg.querySelectorAll('.rs-r.done').forEach(tr => { tr.onclick = () => openIdeaReport(r, tr.dataset.i); });
+  }
+  async function listResearch() {
+    const j = await fetch('/api/research').then(x => x.json()).catch(() => null);
+    const { dlg, close } = overlay('rs-list');
+    const L = (j && j.list) || [];
+    dlg.innerHTML = `<div class="ind-h"><b>Исследования</b><button class="ind-x" title="Закрыть (Esc)">✕</button></div>
+      <div class="ind-b vd-b">${L.length ? `<table class="rs-tbl big"><tr><th>Когда</th><th>Цель</th><th>Символ</th><th>Идей</th><th>Прошли</th></tr>${L.map(r => `<tr class="rs-r done" data-id="${esc(r.id)}"><td data-noi18n>${new Date(r.created).toISOString().slice(0, 10)}</td><td data-noi18n>${esc(r.goal || '')}</td><td data-noi18n>${esc(r.symbol)} ${esc(r.interval)}</td><td>${r.done}/${r.ideas}</td><td>${r.best}</td></tr>`).join('')}</table>`
+      : '<div class="ind-empty">Исследований пока нет. Выберите у Panda режим «Исследование» и опишите цель, например: «найди идею входа на золоте H1».</div>'}</div>`;
+    dlg.querySelector('.ind-x').onclick = close;
+    dlg.querySelectorAll('[data-id]').forEach(tr => { tr.onclick = () => { close(); showResearch(tr.dataset.id); }; });
+  }
+
+  window.QLValidate = { openSetup, showReport, chatCard, isStrategy, researchCard, showResearch, listResearch };
 })();

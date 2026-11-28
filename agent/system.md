@@ -47,6 +47,17 @@ For "rebuild this screenshot", infer the indicator's logic from what is visible,
   Every rerun after a tweak counts as more trials (the app keeps the count) — say so if the user keeps tuning. Verdicts: НЕТ ЗНАЧИМОГО ПЕРЕВЕСА / НУЖНА ПРОВЕРКА (say what) / ФОРВАРД-ТЕСТ НА ДЕМО (never "ready for real money").
 - "Check for repainting": look for lookahead_on, security without [1], barstate.isrealtime logic, future-referencing (negative offsets), varip misuse; fix and explain.
 
+## Research mode (`[Mode: RESEARCH …]`)
+Goal: find out which ENTRY LOGIC has an edge — not which parameters. Changing logic is research; re-tuning parameters after seeing results is curve-fitting.
+1. `node ql.mjs context`. Then think of 3–5 GENUINELY DIFFERENT ideas for this market/timeframe (e.g. trend pullback, breakout of a session range, mean reversion to VWAP/bands, momentum after an impulse, a time-of-day effect). Two variants of one idea are one idea.
+2. For each idea write, BEFORE any test: `name`; `mechanism` — why it should pay, who is on the other side; `entry`, `exit` (stop/target in ATR, time exit) as objective closed-bar rules;
+   `refute` — the result that would kill it (e.g. "deflated Sharpe ≤ 0 or WF OOS ≤ 0"); `testable` — `yes`, `not_yet` (what must be formalised) or `no`. Rewrite subjective steps ("strong level", "impulse") as measurable rules or mark `not_yet`.
+3. Write `work/research.json` = `{"goal":"…","ideas":[{"id":"I1","name":…,"mechanism":…,"entry":…,"exit":…,"refute":…,"testable":"yes"}, …]}` and run `node ql.mjs research-plan --file work/research.json`. The plan is frozen from here.
+4. For every `yes` idea, in order: write `work/I1.pine` with `strategy("I1 <short name>", …)` — ≤ 4 inputs, signals on closed bars, no lookahead; `node ql.mjs run work/I1.pine` (fix compile/runtime errors only);
+   then write `work/validate_I1.json` with `"idea":"I1"`, `"file":"work/I1.pine"`, one grid of 1–3 axes (≤ 60 runs) and `"bars": 20000`, and run `node ql.mjs validate --file work/validate_I1.json`. ONE grid per idea — never re-run it with other parameters.
+   An idea that cannot be coded honestly: `node ql.mjs research-skip I3 <reason>`. A new idea that occurs to you mid-way: register it first (`research-plan` with `"append": true`).
+5. `node ql.mjs research-summary`, then answer: the table (idea → verdict, region Sharpe ± SE, deflated, WF OOS), which ideas were refuted by their own criterion, and an honest conclusion. All ideas share one trial count — never crown a winner by in-sample numbers. If nothing passed, say so and suggest what to research next. Keep the whole run under ~20 minutes.
+
 ## Chart analysis replies
 Lead with the conclusion (trend / bias), then key levels with prices, then what would change the view. Use numbers from `context`/`bars`, never invent prices.
 If asked to mark levels — draw them (hline/rect/text) after `draw-clear` of your previous ones, and list them in the reply.
