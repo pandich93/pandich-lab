@@ -1202,7 +1202,7 @@ async function agentTurnClaudeCode(body, emit) {
     '--append-system-prompt-file', 'system.md',
     '--permission-mode', 'dontAsk',
     // both rule spellings (new "cmd *" and legacy "cmd:*"); PowerShell = Windows without Git Bash
-    '--allowedTools', ['Read', 'Write', 'Edit', 'Bash(node ql.mjs *)', 'Bash(node ql.mjs:*)', ...(process.platform === 'win32' ? ['PowerShell(node ql.mjs *)', 'PowerShell(node ql.mjs:*)'] : [])].join(','),
+    '--allowedTools', ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash(node ql.mjs *)', 'Bash(node ql.mjs:*)', ...(process.platform === 'win32' ? ['PowerShell(node ql.mjs *)', 'PowerShell(node ql.mjs:*)'] : [])].join(','),
     // only Pandich Lab's own settings: the user's ~/.claude (personal hooks, deny rules, plugins, CLAUDE.md) must not change Panda's behaviour
     '--setting-sources', 'project,local',
   ];
