@@ -16,7 +16,8 @@ To list or search files use the Glob/Grep tools (e.g. Glob `../library/*.pine`),
 - `node ql.mjs chart <SYMBOL> <tf>` — switch the chart (MT5 Market Watch symbols with broker suffix, e.g. XAUUSDm, or Binance BTCUSDT).
 - `node ql.mjs draw '<json>'` — draw on the chart. JSON object or array (≤ 50). Times: ISO UTC "2026-11-25 03:15" or unix seconds.
   Types: `hline {price}`, `hray {price,t}`, `vline {t}`, `trend|ray|extended|arrow|rect|ellipse|fib_retr|price_range|date_range {t1,p1,t2,p2}`,
-  `text|price_label|flag {t,price,text}`, `callout {t,price,text}`, `long|short {t1,t2,entry,tp,sl}`, `channel {t1,p1,t2,p2,t3,p3}`.
+  `text|price_label|flag {t,price,text}`, `callout {t,price,text}`, `long|short {t1,t2,entry,tp,sl}`, `channel {t1,p1,t2,p2,t3,p3}`,
+  `vp_range {t1,t2}` (volume profile of the bars between t1 and t2: POC, value area; optional rows, va, showVA, extendPoc), `vp_anchor {t}` (volume profile from t to the last bar).
   Optional on any: `color` (#hex), `width` (1-4), `dash` (solid|dashed|dotted), `text`, `extend` (true = to the right).
   Example: `node ql.mjs draw '[{"type":"hline","price":3550.5,"text":"S1","color":"#26a69a"},{"type":"rect","t1":"2026-11-24 14:00","p1":3570,"t2":"2026-11-25 03:00","p2":3560,"color":"#f23645","text":"supply"}]'`
   For long JSON write it to `work/draw.json` and run `node ql.mjs draw --file work/draw.json`.

@@ -1060,5 +1060,18 @@ window.QL_I18N_DICT = {
   "Удалить этот чат из истории? Файл переносится в папку _deleted, его можно вернуть вручную.": ["Delete this chat from history? The file moves to the _deleted folder and can be restored manually.", "Bu chat tarixdan o'chirilsinmi? Fayl _deleted papkasiga ko'chadi, uni qo'lda qaytarish mumkin."],
   "Удалено.": ["Deleted.", "O'chirildi."],
   "запуск на графике": ["run on the chart", "grafikda ishga tushirish"],
-  "Чат": ["Chat", "Chat"]
+  "Чат": ["Chat", "Chat"],
+  // ── volume profile drawing tools
+  "Объём: все инструменты": ["Volume: all tools", "Hajm: barcha vositalar"],
+  "Профиль объёма в диапазоне": ["Fixed range volume profile", "Diapazondagi hajm profili"],
+  "Профиль объёма с привязкой": ["Anchored volume profile", "Bog'langan hajm profili"],
+  "нет баров в диапазоне": ["no bars in range", "diapazonda bar yo'q"],
+  "Строк по цене": ["Price rows", "Narx qatorlari"],
+  "Ширина, % диапазона": ["Width, % of range", "Kenglik, diapazonning %"],
+  "Расположение": ["Placement", "Joylashuv"],
+  "покупки / продажи раздельно": ["buy / sell separately", "xarid / sotuv alohida"],
+  "Растущие бары": ["Up bars", "O'suvchi barlar"],
+  "Падающие бары": ["Down bars", "Tushuvchi barlar"],
+  "POC вправо": ["POC to the right", "POC o'ngga"],
+  "Линия выше — стиль POC. Объём бара делится между строками пропорционально тому, сколько цены бар в них занял; «покупки / продажи» — растущие и падающие бары. Для MT5 (форекс, металлы) объём тиковый.": ["The line above is the POC style. A bar's volume is split across rows in proportion to how much of its range falls in each; \"buy / sell\" means up and down bars. For MT5 (forex, metals) volume is tick volume.", "Yuqoridagi chiziq — POC uslubi. Bar hajmi qatorlar orasida bar ularda egallagan narx ulushiga mutanosib bo'linadi; «xarid / sotuv» — o'suvchi va tushuvchi barlar. MT5 da (forex, metallar) hajm tikli."]
 };

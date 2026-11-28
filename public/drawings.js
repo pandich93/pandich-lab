@@ -51,6 +51,8 @@ const ICON = {
   price_range: I('<path d="M9 2v14M6 5l3-3 3 3M6 13l3 3 3-3M3 2h12M3 16h12"/>'),
   date_range: I('<path d="M2 9h14M5 6L2 9l3 3M13 6l3 3-3 3M2 3v12M16 3v12"/>'),
   dp_range: I('<rect x="2" y="3" width="14" height="12"/><path d="M9 5v8M5 9h8"/>'),
+  vp_range: I('<path d="M2 2v14M16 2v14"/><path d="M2 4h6M2 7h9M2 10h11M2 13h5" stroke-width="1.8"/>'),
+  vp_anchor: I('<path d="M3 2v14"/><circle cx="3" cy="9" r="1.5"/><path d="M5 5h5M5 8h8M5 11h10M5 14h4" stroke-width="1.8"/>'),
   magnet: I('<path d="M4 3v6a5 5 0 0010 0V3h-3v6a2 2 0 01-4 0V3z"/>'),
   lock: I('<rect x="4" y="8" width="10" height="8" rx="1"/><path d="M6 8V5.5a3 3 0 016 0V8"/>'),
   eye: I('<path d="M1 9s3-5 8-5 8 5 8 5-3 5-8 5-8-5-8-5z"/><circle cx="9" cy="9" r="2.2"/>'),
@@ -70,6 +72,7 @@ const GROUPS = [
   { id: 'brush', name: 'Кисть', icon: 'brush' },
   { id: 'text', name: 'Аннотации', icon: 'text' },
   { id: 'measure', name: 'Прогноз и измерения', icon: 'long' },
+  { id: 'volume', name: 'Объём', icon: 'vp_range' },
 ];
 const TOOLS = [
   ['trend', 'Линия тренда', 'lines', 2], ['ray', 'Луч', 'lines', 2], ['extended', 'Продолженная линия', 'lines', 2], ['arrow', 'Стрелка', 'lines', 2],
@@ -85,11 +88,12 @@ const TOOLS = [
   ['text', 'Текст', 'text', 1], ['callout', 'Выноска', 'text', 2], ['price_label', 'Ценовая метка', 'text', 1], ['flag', 'Флажок', 'text', 1],
   ['long', 'Длинная позиция', 'measure', 2], ['short', 'Короткая позиция', 'measure', 2],
   ['price_range', 'Диапазон цен', 'measure', 2], ['date_range', 'Диапазон дат', 'measure', 2], ['dp_range', 'Диапазон дат и цен', 'measure', 2],
+  ['vp_range', 'Профиль объёма в диапазоне', 'volume', 2], ['vp_anchor', 'Профиль объёма с привязкой', 'volume', 1],
 ].map(([id, name, group, n]) => ({ id, name, group, n }));
 const TOOL = Object.fromEntries(TOOLS.map(t => [t.id, t]));
 const FILLABLE = new Set(['rect', 'ellipse', 'triangle', 'channel', 'fib_retr', 'fib_ext', 'gann_box', 'xabcd']);
 const TEXTUAL = new Set(['text', 'callout', 'flag', 'trend', 'hline', 'rect']);
-const DEFAULT_COLOR = { long: '#089981', short: '#F23645', price_range: '#2962FF', date_range: '#2962FF', dp_range: '#2962FF', text: '#E0E3EB', flag: '#F23645', callout: '#2962FF', price_label: '#2962FF' };
+const DEFAULT_COLOR = { vp_range: '#F23645', vp_anchor: '#F23645', long: '#089981', short: '#F23645', price_range: '#2962FF', date_range: '#2962FF', dp_range: '#2962FF', text: '#E0E3EB', flag: '#F23645', callout: '#2962FF', price_label: '#2962FF' };
 
 const FIB_RETR = [[0, '#787B86'], [0.236, '#F23645'], [0.382, '#FF9800'], [0.5, '#4CAF50'], [0.618, '#089981'], [0.786, '#00BCD4'], [1, '#787B86'], [1.618, '#2962FF'], [2.618, '#F23645'], [3.618, '#9C27B0'], [4.236, '#E91E63']];
 const FIB_EXT = [[0, '#787B86'], [0.236, '#F23645'], [0.382, '#FF9800'], [0.5, '#4CAF50'], [0.618, '#089981'], [0.786, '#00BCD4'], [1, '#787B86'], [1.618, '#2962FF'], [2.618, '#F23645']];
@@ -220,6 +224,69 @@ class G {
   }
 }
 
+// ───────── volume profile for a time range (drawing tools «Профиль объёма») ─────────
+// volume of each bar is spread over the price rows it covers in proportion to the overlap; up bars and down bars kept apart
+const VP = new Map(); // memo: range + settings + last bar → profile (several profiles on one chart)
+function vpCompute(a, b, s) {
+  const B = bars(); if (!B.length) return null;
+  const rows = Math.max(4, Math.min(400, Math.round(+s.rows || 24))), va = Math.max(10, Math.min(100, +s.va || 70));
+  const last = B[B.length - 1], key = `${a}|${b}|${rows}|${va}|${B.length}|${last.time}|${last.close}|${last.volume}`;
+  if (VP.has(key)) return VP.get(key);
+  let lo = Infinity, hi = -Infinity; const sub = [];
+  for (const k of B) if (k.time >= a && k.time <= b) { sub.push(k); lo = Math.min(lo, k.low); hi = Math.max(hi, k.high); }
+  let res = null;
+  if (sub.length && hi > lo) {
+    const st = (hi - lo) / rows, up = new Float64Array(rows), dn = new Float64Array(rows);
+    for (const k of sub) {
+      const v = +k.volume || 0, isUp = k.close >= k.open, rng = k.high - k.low;
+      const r0 = Math.max(0, Math.min(rows - 1, Math.floor((k.low - lo) / st))), r1 = Math.max(0, Math.min(rows - 1, Math.floor((k.high - lo) / st - 1e-9)));
+      for (let r = r0; r <= r1; r++) {
+        const ov = rng > 0 ? Math.max(0, Math.min(k.high, lo + (r + 1) * st) - Math.max(k.low, lo + r * st)) / rng : 1 / (r1 - r0 + 1);
+        if (isUp) up[r] += v * ov; else dn[r] += v * ov;
+      }
+    }
+    const tot = Array.from(up, (u, i) => u + dn[i]), total = tot.reduce((x, y) => x + y, 0);
+    let poc = 0; tot.forEach((v, i) => { if (v > tot[poc]) poc = i; });
+    let u = poc, d = poc, acc = tot[poc];
+    while (acc < total * va / 100 && (u < rows - 1 || d > 0)) {
+      const nu = u < rows - 1 ? tot[u + 1] : -1, nd = d > 0 ? tot[d - 1] : -1;
+      if (nu >= nd) { u++; acc += Math.max(0, nu); } else { d--; acc += Math.max(0, nd); }
+    }
+    res = { lo, hi, st, rows, up, dn, tot, max: Math.max(...tot) || 1, total, poc: lo + (poc + 0.5) * st, vah: lo + (u + 1) * st, val: lo + d * st, vaFrom: d, vaTo: u, pocRow: poc, n: sub.length };
+  }
+  if (VP.size > 40) VP.delete(VP.keys().next().value);
+  VP.set(key, res); return res;
+}
+function renderVP(d, P, g, selected) {
+  const s = d.style, B = bars(); if (!B.length || !P[0]) return;
+  const last = B[B.length - 1], bs = ts().options().barSpacing || 6;
+  const tA = d.pts[0].t, tB = d.type === 'vp_anchor' ? last.time : d.pts[1].t;
+  const xA = P[0].x, xB = d.type === 'vp_anchor' ? (X(last.time) ?? xA) + bs / 2 : P[1].x;
+  const a = Math.min(tA, tB), b = Math.max(tA, tB), xa = Math.min(xA, xB), xb = Math.max(xA, xB);
+  const col = s.color || '#F23645';
+  if (d.type === 'vp_anchor') g.line(xA, 0, xA, g.h, alpha(col, 0.35), 1, 'dotted');
+  const pr = vpCompute(a, b, s);
+  if (!pr) { const y = P[0].y; g.rect(xa, y - 20, Math.max(xb, xa + 8), y + 20, null, alpha(col, 0.5), 1, 'dashed'); g.label('нет баров в диапазоне', xa + 4, y, { tc: '#B2B5BE', align: 'left' }); return; }
+  const yT = Y(pr.hi), yB = Y(pr.lo); if (yT === null || yB === null) return;
+  g.areas.push({ box: [xa, Math.min(yT, yB), Math.max(xb, xa + 10), Math.max(yT, yB)] });
+  const right = s.placement === 'right', span = Math.max(10, xb - xa), maxW = span * Math.max(5, Math.min(100, +s.widthPct || 30)) / 100;
+  const upC = s.upColor || '#26A69A', dnC = s.downColor || '#EF5350', split = s.split !== false;
+  if (g.c) {
+    for (let r = 0; r < pr.rows; r++) {
+      const y1 = Y(pr.lo + (r + 1) * pr.st), y2 = Y(pr.lo + r * pr.st); if (y1 === null || y2 === null) continue;
+      const h = Math.max(1, y2 - y1 - (y2 - y1 > 3 ? 1 : 0)), inVA = r >= pr.vaFrom && r <= pr.vaTo, op = inVA ? 0.75 : 0.32;
+      const lu = maxW * (split ? pr.up[r] : pr.tot[r]) / pr.max, ld = split ? maxW * pr.dn[r] / pr.max : 0;
+      g.c.fillStyle = alpha(split ? upC : (s.barColor || '#2962FF'), op);
+      if (right) g.c.fillRect(xb - lu - ld, y1, lu, h); else g.c.fillRect(xa, y1, lu, h);
+      if (ld) { g.c.fillStyle = alpha(dnC, op); if (right) g.c.fillRect(xb - ld, y1, ld, h); else g.c.fillRect(xa + lu, y1, ld, h); }
+    }
+  }
+  const yP = Y(pr.poc);
+  if (s.showPoc !== false && yP !== null) { g.line(xa, yP, s.extendPoc ? g.w : xb, yP, col, s.width || 1, s.dash); g.label(`POC ${fmtP(pr.poc)}`, (s.extendPoc ? g.w : xb) - 2, yP - 2, { tc: col, align: 'right', base: 'bottom', pad: 1 }); }
+  if (s.showVA) for (const [p, n] of [[pr.vah, 'VAH'], [pr.val, 'VAL']]) { const y = Y(p); if (y !== null) { g.line(xa, y, xb, y, alpha('#2962FF', 0.9), 1, 'dashed'); g.label(`${n} ${fmtP(p)}`, xb - 2, y - 2, { tc: '#5b8cff', align: 'right', base: 'bottom', pad: 1 }); } }
+  if (selected) g.rect(xa, Math.min(yT, yB), xb, Math.max(yT, yB), null, alpha('#B2B5BE', 0.5), 1, 'dashed');
+}
+
 // ───────── renderers ─────────
 function levelText(k, s) { return s.showLevels === false ? '' : s.pct ? `${+(k * 100).toFixed(2)}%` : String(k); }
 function levelLabel(k, p, s = {}) { const a = levelText(k, s), b = s.showPrices === false ? '' : fmtP(p); return a && b ? `${a} (${b})` : a || b; }
@@ -230,6 +297,7 @@ function render(d, P, g, selected) {
   const type = d.type;
   const txt = s.text;
   switch (type) {
+    case 'vp_range': case 'vp_anchor': renderVP(d, P, g, selected); break;
     case 'trend': case 'ray': case 'extended': case 'arrow': {
       if (P.length < 2) break;
       const [a, b] = P;
@@ -840,6 +908,16 @@ function renderSettings() {
     body += `<div class="dset-row"><span>Линия</span><input type="color" data-k="color" data-t="color" value="${(s.color || '#2962ff').slice(0, 7)}">
       <select data-k="width" data-t="num">${[1, 2, 3, 4].map(v => `<option ${v === s.width ? 'selected' : ''}>${v}</option>`).join('')}</select>
       <select data-k="dash" data-t="str"><option value="solid" ${s.dash === 'solid' ? 'selected' : ''}>Сплошная</option><option value="dashed" ${s.dash === 'dashed' ? 'selected' : ''}>Пунктир</option><option value="dotted" ${s.dash === 'dotted' ? 'selected' : ''}>Точки</option></select></div>`;
+    if (d.type === 'vp_range' || d.type === 'vp_anchor') {
+      const num = (k, def, min, max, st = 1) => `<input type="number" data-k="${k}" data-t="num" min="${min}" max="${max}" step="${st}" value="${s[k] ?? def}">`;
+      body += `<div class="dset-row"><span>Строк по цене</span>${num('rows', 24, 4, 400)}</div>
+        <div class="dset-row"><span>Value Area, %</span>${num('va', 70, 10, 100)}</div>
+        <div class="dset-row"><span>Ширина, % диапазона</span>${num('widthPct', 30, 5, 100)}</div>
+        <div class="dset-row"><span>Расположение</span><select data-k="placement" data-t="str"><option value="left" ${s.placement !== 'right' ? 'selected' : ''}>слева</option><option value="right" ${s.placement === 'right' ? 'selected' : ''}>справа</option></select></div>
+        <div class="dset-row"><span>Объём</span>${chk('split', 'покупки / продажи раздельно', true)}<input type="color" data-k="upColor" data-t="str" value="${(s.upColor || '#26A69A').slice(0, 7)}" title="Растущие бары"><input type="color" data-k="downColor" data-t="str" value="${(s.downColor || '#EF5350').slice(0, 7)}" title="Падающие бары"></div>
+        <div class="dset-row"><span>Показывать</span>${chk('showPoc', 'POC', true)}${chk('showVA', 'VAH / VAL')}${chk('extendPoc', 'POC вправо')}</div>
+        <div class="muted dset-note">Линия выше — стиль POC. Объём бара делится между строками пропорционально тому, сколько цены бар в них занял; «покупки / продажи» — растущие и падающие бары. Для MT5 (форекс, металлы) объём тиковый.</div>`;
+    }
     if (FILLABLE.has(d.type)) {
       body += `<div class="dset-row"><span>Фон</span>${chk('fill', 'заливка', true)}`;
       if (FIBLIKE.has(d.type)) body += `<input type="range" min="0" max="40" step="1" data-k="fillAlpha" data-t="pct" value="${Math.round((s.fillAlpha ?? 0.08) * 100)}" title="Прозрачность фона"><span class="dset-val" data-show="fillAlpha">${Math.round((s.fillAlpha ?? 0.08) * 100)}%</span>`;
