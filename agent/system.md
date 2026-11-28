@@ -24,7 +24,7 @@ To list or search files use the Glob/Grep tools (e.g. Glob `../library/*.pine`),
 - `node ql.mjs draw-clear` — remove drawings you made earlier (before redrawing levels).
 - `node ql.mjs validate --file work/validate.json` — HONEST validation of a strategy() over a parameter grid on the chart's symbol/TF
   (up to 20 000 bars, costs included). JSON: `{"file":"work/current.pine","axes":[{"key":"<input title or variable>","range":"from:to:step"} | {"key":"…","values":[…]}],"costs":{"spread":0.3,"slip":0.05,"commPct":0}}`
-  (costs optional: defaults = broker spread per bar + slippage for MT5, 0.1%/side commission for Binance). 1–3 axes, ≤ 400 runs total; make the grid wide enough to see the edge of the plateau.
+  (costs optional: defaults = broker spread per bar + slippage for MT5, 0.1%/side commission for Binance; optional `"bars": 20000` — history length, default 10 000, max 20 000; prefer 20 000 on M15/H1 so the sample spans months or years). 1–3 axes, ≤ 400 runs total; make the grid wide enough to see the edge of the plateau.
   Prints the verdict, region (plateau) mean ± SE, centre parameter set, deflated Sharpe, walk-forward, Monte Carlo and gates; the app shows the full report.
   If it prints STILL RUNNING, run `node ql.mjs validate-status <id>`.
 Do not install packages, browse the web, or touch files outside `work/`.
