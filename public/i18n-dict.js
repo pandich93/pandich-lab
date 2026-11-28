@@ -1073,5 +1073,13 @@ window.QL_I18N_DICT = {
   "Растущие бары": ["Up bars", "O'suvchi barlar"],
   "Падающие бары": ["Down bars", "Tushuvchi barlar"],
   "POC вправо": ["POC to the right", "POC o'ngga"],
-  "Линия выше — стиль POC. Объём бара делится между строками пропорционально тому, сколько цены бар в них занял; «покупки / продажи» — растущие и падающие бары. Для MT5 (форекс, металлы) объём тиковый.": ["The line above is the POC style. A bar's volume is split across rows in proportion to how much of its range falls in each; \"buy / sell\" means up and down bars. For MT5 (forex, metals) volume is tick volume.", "Yuqoridagi chiziq — POC uslubi. Bar hajmi qatorlar orasida bar ularda egallagan narx ulushiga mutanosib bo'linadi; «xarid / sotuv» — o'suvchi va tushuvchi barlar. MT5 da (forex, metallar) hajm tikli."]
+  "Линия выше — стиль POC. Объём бара делится между строками пропорционально тому, сколько цены бар в них занял; «покупки / продажи» — растущие и падающие бары. Для MT5 (форекс, металлы) объём тиковый.": ["The line above is the POC style. A bar's volume is split across rows in proportion to how much of its range falls in each; \"buy / sell\" means up and down bars. For MT5 (forex, metals) volume is tick volume.", "Yuqoridagi chiziq — POC uslubi. Bar hajmi qatorlar orasida bar ularda egallagan narx ulushiga mutanosib bo'linadi; «xarid / sotuv» — o'suvchi va tushuvchi barlar. MT5 da (forex, metallar) hajm tikli."],
+  // ── anchored VWAP
+  "VWAP с привязкой": ["Anchored VWAP", "Bog'langan VWAP"],
+  "нет баров после точки": ["no bars after the point", "nuqtadan keyin bar yo'q"],
+  "Источник": ["Source", "Manba"],
+  "Полосы, σ": ["Bands, σ", "Polosalar, σ"],
+  "Метка": ["Label", "Belgi"],
+  "цена VWAP на последнем баре": ["VWAP price on the last bar", "oxirgi bardagi VWAP narxi"],
+  "VWAP = Σ(цена × объём) / Σ(объём) с бара привязки. Полосы — взвешенное по объёму стандартное отклонение. Для MT5 объём тиковый.": ["VWAP = Σ(price × volume) / Σ(volume) from the anchor bar. Bands — volume-weighted standard deviation. For MT5 volume is tick volume.", "VWAP = Σ(narx × hajm) / Σ(hajm) bog'lash baridan. Polosalar — hajm bo'yicha tortilgan standart og'ish. MT5 da hajm tikli."]
 };

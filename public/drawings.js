@@ -53,6 +53,7 @@ const ICON = {
   dp_range: I('<rect x="2" y="3" width="14" height="12"/><path d="M9 5v8M5 9h8"/>'),
   vp_range: I('<path d="M2 2v14M16 2v14"/><path d="M2 4h6M2 7h9M2 10h11M2 13h5" stroke-width="1.8"/>'),
   vp_anchor: I('<path d="M3 2v14"/><circle cx="3" cy="9" r="1.5"/><path d="M5 5h5M5 8h8M5 11h10M5 14h4" stroke-width="1.8"/>'),
+  avwap: I('<path d="M2 14c3-1 4-6 7-7s4 2 7-3"/><path d="M2 11c3-1 4-6 7-7s4 2 7-3" stroke-dasharray="1.5 2"/><circle cx="2" cy="14" r="1.4"/>'),
   magnet: I('<path d="M4 3v6a5 5 0 0010 0V3h-3v6a2 2 0 01-4 0V3z"/>'),
   lock: I('<rect x="4" y="8" width="10" height="8" rx="1"/><path d="M6 8V5.5a3 3 0 016 0V8"/>'),
   eye: I('<path d="M1 9s3-5 8-5 8 5 8 5-3 5-8 5-8-5-8-5z"/><circle cx="9" cy="9" r="2.2"/>'),
@@ -88,12 +89,12 @@ const TOOLS = [
   ['text', 'Текст', 'text', 1], ['callout', 'Выноска', 'text', 2], ['price_label', 'Ценовая метка', 'text', 1], ['flag', 'Флажок', 'text', 1],
   ['long', 'Длинная позиция', 'measure', 2], ['short', 'Короткая позиция', 'measure', 2],
   ['price_range', 'Диапазон цен', 'measure', 2], ['date_range', 'Диапазон дат', 'measure', 2], ['dp_range', 'Диапазон дат и цен', 'measure', 2],
-  ['vp_range', 'Профиль объёма в диапазоне', 'volume', 2], ['vp_anchor', 'Профиль объёма с привязкой', 'volume', 1],
+  ['vp_range', 'Профиль объёма в диапазоне', 'volume', 2], ['vp_anchor', 'Профиль объёма с привязкой', 'volume', 1], ['avwap', 'VWAP с привязкой', 'volume', 1],
 ].map(([id, name, group, n]) => ({ id, name, group, n }));
 const TOOL = Object.fromEntries(TOOLS.map(t => [t.id, t]));
 const FILLABLE = new Set(['rect', 'ellipse', 'triangle', 'channel', 'fib_retr', 'fib_ext', 'gann_box', 'xabcd']);
 const TEXTUAL = new Set(['text', 'callout', 'flag', 'trend', 'hline', 'rect']);
-const DEFAULT_COLOR = { vp_range: '#F23645', vp_anchor: '#F23645', long: '#089981', short: '#F23645', price_range: '#2962FF', date_range: '#2962FF', dp_range: '#2962FF', text: '#E0E3EB', flag: '#F23645', callout: '#2962FF', price_label: '#2962FF' };
+const DEFAULT_COLOR = { vp_range: '#F23645', vp_anchor: '#F23645', avwap: '#2962FF', long: '#089981', short: '#F23645', price_range: '#2962FF', date_range: '#2962FF', dp_range: '#2962FF', text: '#E0E3EB', flag: '#F23645', callout: '#2962FF', price_label: '#2962FF' };
 
 const FIB_RETR = [[0, '#787B86'], [0.236, '#F23645'], [0.382, '#FF9800'], [0.5, '#4CAF50'], [0.618, '#089981'], [0.786, '#00BCD4'], [1, '#787B86'], [1.618, '#2962FF'], [2.618, '#F23645'], [3.618, '#9C27B0'], [4.236, '#E91E63']];
 const FIB_EXT = [[0, '#787B86'], [0.236, '#F23645'], [0.382, '#FF9800'], [0.5, '#4CAF50'], [0.618, '#089981'], [0.786, '#00BCD4'], [1, '#787B86'], [1.618, '#2962FF'], [2.618, '#F23645']];
@@ -287,6 +288,47 @@ function renderVP(d, P, g, selected) {
   if (selected) g.rect(xa, Math.min(yT, yB), xb, Math.max(yT, yB), null, alpha('#B2B5BE', 0.5), 1, 'dashed');
 }
 
+// ───────── anchored VWAP: Σ(price·volume) / Σ(volume) from the anchor bar; bands = volume-weighted standard deviation ─────────
+const AV = new Map();
+const SRC = { hlc3: k => (k.high + k.low + k.close) / 3, close: k => k.close, hl2: k => (k.high + k.low) / 2, ohlc4: k => (k.open + k.high + k.low + k.close) / 4 };
+function avwapCompute(t0, s) {
+  const B = bars(); if (!B.length) return null;
+  const src = SRC[s.source] ? s.source : 'hlc3', last = B[B.length - 1], key = `${t0}|${src}|${B.length}|${last.time}|${last.close}|${last.volume}`;
+  if (AV.has(key)) return AV.get(key);
+  let i0 = B.findIndex(k => k.time >= t0); const out = [];
+  if (i0 >= 0) {
+    let pv = 0, v = 0, p2v = 0;
+    for (let i = i0; i < B.length; i++) {
+      const k = B[i], p = SRC[src](k), vol = Math.max(0, +k.volume || 0) || 1e-9; // a bar without volume still moves the line a little
+      pv += p * vol; v += vol; p2v += p * p * vol;
+      const vw = pv / v, sd = Math.sqrt(Math.max(0, p2v / v - vw * vw));
+      out.push({ t: k.time, v: vw, sd });
+    }
+  }
+  if (AV.size > 40) AV.delete(AV.keys().next().value);
+  AV.set(key, out); return out;
+}
+function renderAVWAP(d, P, g) {
+  const s = d.style, col = s.color || '#2962FF', S = avwapCompute(d.pts[0].t, s);
+  if (!P[0]) return;
+  if (S && S.length && Math.abs(d.pts[0].p - S[0].v) > 1e-9) d.pts[0].p = S[0].v; // keep the anchor handle on the line (time is what matters)
+  const ya = S && S.length ? Y(S[0].v) : P[0].y;
+  if (ya !== null) g.line(P[0].x, ya - 6, P[0].x, ya + 6, col, 1); // anchor tick
+  if (!S || !S.length) { g.label('нет баров после точки', P[0].x + 4, P[0].y, { tc: '#B2B5BE', align: 'left' }); return; }
+  const path = (k, dash, w, c) => {
+    let prev = null;
+    for (const q of S) {
+      const x = X(q.t), y = Y(q.v + k * q.sd); if (x === null || y === null) { prev = null; continue; }
+      if (prev && x > -50 && prev.x < g.w + 50) g.line(prev.x, prev.y, x, y, c, w, dash);
+      prev = { x, y };
+    }
+  };
+  for (const [on, k] of [[s.band1, s.band1k ?? 1], [s.band2, s.band2k ?? 2], [s.band3, s.band3k ?? 3]]) if (on) { path(k, 'dashed', 1, alpha(col, 0.55)); path(-k, 'dashed', 1, alpha(col, 0.55)); }
+  path(0, s.dash, s.width || 2, col);
+  const lastQ = S[S.length - 1], xl = X(lastQ.t), yl = Y(lastQ.v);
+  if (xl !== null && yl !== null && s.showLabel !== false) g.label(`VWAP ${fmtP(lastQ.v)}`, xl + 80 < g.w ? xl + 6 : xl - 6, yl - 4, { color: col, tc: '#fff', align: xl + 80 < g.w ? 'left' : 'right', base: 'bottom', pad: 3 });
+}
+
 // ───────── renderers ─────────
 function levelText(k, s) { return s.showLevels === false ? '' : s.pct ? `${+(k * 100).toFixed(2)}%` : String(k); }
 function levelLabel(k, p, s = {}) { const a = levelText(k, s), b = s.showPrices === false ? '' : fmtP(p); return a && b ? `${a} (${b})` : a || b; }
@@ -298,6 +340,7 @@ function render(d, P, g, selected) {
   const txt = s.text;
   switch (type) {
     case 'vp_range': case 'vp_anchor': renderVP(d, P, g, selected); break;
+    case 'avwap': renderAVWAP(d, P, g); break;
     case 'trend': case 'ray': case 'extended': case 'arrow': {
       if (P.length < 2) break;
       const [a, b] = P;
@@ -572,7 +615,7 @@ function localXY(e) { const r = chartEl.getBoundingClientRect(); return { x: e.c
 function inPane({ x, y }) { const { w, h } = paneSize(); return x >= 0 && y >= 0 && x <= w && y <= h; }
 function newDrawing(type, pt) {
   const t = TOOL[type];
-  const style = { color: DEFAULT_COLOR[type] || '#2962FF', width: type === 'brush' ? 2 : 1, dash: 'solid', fill: true, text: '', fontSize: 14, extend: false, ...(styleDefaults(type) || {}) };
+  const style = { color: DEFAULT_COLOR[type] || '#2962FF', width: type === 'brush' || type === 'avwap' ? 2 : 1, dash: 'solid', fill: true, text: '', fontSize: 14, extend: false, ...(styleDefaults(type) || {}) };
   return { id: nid(), type, pts: t.n === 1 ? [pt] : [pt, { ...pt }], style, locked: false, hidden: false };
 }
 function finishCreate() {
@@ -918,6 +961,13 @@ function renderSettings() {
         <div class="dset-row"><span>Показывать</span>${chk('showPoc', 'POC', true)}${chk('showVA', 'VAH / VAL')}${chk('extendPoc', 'POC вправо')}</div>
         <div class="muted dset-note">Линия выше — стиль POC. Объём бара делится между строками пропорционально тому, сколько цены бар в них занял; «покупки / продажи» — растущие и падающие бары. Для MT5 (форекс, металлы) объём тиковый.</div>`;
     }
+    if (d.type === 'avwap') {
+      const num = (k, def) => `<input type="number" data-k="${k}" data-t="num" min="0.1" max="10" step="0.1" value="${s[k] ?? def}" style="width:64px">`;
+      body += `<div class="dset-row"><span>Источник</span><select data-k="source" data-t="str">${[['hlc3', '(H+L+C)/3'], ['close', 'Close'], ['hl2', '(H+L)/2'], ['ohlc4', '(O+H+L+C)/4']].map(([v, n]) => `<option value="${v}" ${(s.source || 'hlc3') === v ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
+        <div class="dset-row"><span>Полосы, σ</span>${chk('band1', '')}${num('band1k', 1)}${chk('band2', '')}${num('band2k', 2)}${chk('band3', '')}${num('band3k', 3)}</div>
+        <div class="dset-row"><span>Метка</span>${chk('showLabel', 'цена VWAP на последнем баре', true)}</div>
+        <div class="muted dset-note">VWAP = Σ(цена × объём) / Σ(объём) с бара привязки. Полосы — взвешенное по объёму стандартное отклонение. Для MT5 объём тиковый.</div>`;
+    }
     if (FILLABLE.has(d.type)) {
       body += `<div class="dset-row"><span>Фон</span>${chk('fill', 'заливка', true)}`;
       if (FIBLIKE.has(d.type)) body += `<input type="range" min="0" max="40" step="1" data-k="fillAlpha" data-t="pct" value="${Math.round((s.fillAlpha ?? 0.08) * 100)}" title="Прозрачность фона"><span class="dset-val" data-show="fillAlpha">${Math.round((s.fillAlpha ?? 0.08) * 100)}%</span>`;
@@ -1015,6 +1065,7 @@ window.QLDraw = {
   selectedId: () => D.selected ? D.selected.id : null,
   removeAgent: () => { if (!D.items.some(d => d.style && d.style.agent)) return; snapshot(); D.items = D.items.filter(d => !(d.style && d.style.agent)); if (D.selected && !D.items.includes(D.selected)) D.selected = null; save(); renderProps(); requestDraw(); },
   tools: () => TOOLS.map(({ id, name, group, n }) => ({ id, name, group, points: n })),
+  calc: id => { const d = D.items.find(x => x.id === id); if (!d) return null; if (d.type === 'avwap') return avwapCompute(d.pts[0].t, d.style); if (d.type === 'vp_range' || d.type === 'vp_anchor') { const B = bars(), a = d.pts[0].t, b = d.type === 'vp_anchor' ? B[B.length - 1].time : d.pts[1].t; const r = vpCompute(Math.min(a, b), Math.max(a, b), d.style); return r && { ...r, up: [...r.up], dn: [...r.dn] }; } return null; },
   redraw: requestDraw,
   openSettings: id => openSettings(D.items.find(x => x.id === id)),
   resetView,

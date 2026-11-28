@@ -1253,7 +1253,7 @@ function toSec(v) {
   const n = Number(v); if (Number.isFinite(n)) return toSec(n);
   const ms = Date.parse(/Z|[+-]\d\d:?\d\d$/.test(v) ? v : String(v).replace(' ', 'T') + 'Z'); return Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
 }
-const DRAW_TYPES = new Set(['hline', 'hray', 'vline', 'trend', 'ray', 'extended', 'arrow', 'rect', 'ellipse', 'fib_retr', 'price_range', 'date_range', 'text', 'price_label', 'flag', 'callout', 'long', 'short', 'channel', 'vp_range', 'vp_anchor']);
+const DRAW_TYPES = new Set(['hline', 'hray', 'vline', 'trend', 'ray', 'extended', 'arrow', 'rect', 'ellipse', 'fib_retr', 'price_range', 'date_range', 'text', 'price_label', 'flag', 'callout', 'long', 'short', 'channel', 'vp_range', 'vp_anchor', 'avwap']);
 async function buildDrawing(st, spec) {
   if (!spec || !DRAW_TYPES.has(spec.type)) throw new Error(`type must be one of: ${[...DRAW_TYPES].join(', ')}`);
   const bars = await getBars(st.chart.symbol, st.chart.interval, st.chart.limit);
@@ -1271,10 +1271,11 @@ async function buildDrawing(st, spec) {
     case 'channel': pts = [{ t: t1, p: num(spec.p1, 'p1') }, { t: t2, p: num(spec.p2, 'p2') }, { t: toSec(spec.t3) ?? t1, p: num(spec.p3, 'p3') }]; break;
     case 'vp_range': pts = [{ t: t1, p: bars[n - 1].close }, { t: toSec(spec.t2) ?? lastT, p: bars[n - 1].close }]; break; // volume profile of the bars between t1 and t2
     case 'vp_anchor': pts = [{ t, p: bars[n - 1].close }]; break; // volume profile from t to the last bar
+    case 'avwap': pts = [{ t, p: bars[n - 1].close }]; break; // anchored VWAP from t
     default: pts = [{ t: t1, p: num(spec.p1, 'p1') }, { t: t2, p: num(spec.p2, 'p2') }];
   }
   const style = { agent: true };
-  for (const k of ['color', 'text', 'dash', 'fill', 'extend', 'rows', 'va', 'showVA', 'extendPoc', 'placement', 'widthPct']) if (spec[k] !== undefined) style[k] = spec[k];
+  for (const k of ['color', 'text', 'dash', 'fill', 'extend', 'rows', 'va', 'showVA', 'extendPoc', 'placement', 'widthPct', 'source', 'band1', 'band2']) if (spec[k] !== undefined) style[k] = spec[k];
   if (spec.width !== undefined) style.width = Number(spec.width) || 1;
   return { type: spec.type, pts, style };
 }
