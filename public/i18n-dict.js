@@ -950,5 +950,9 @@ window.QL_I18N_DICT = {
   "{0}% региона": ["{0}% of region", "hududning {0}%"],
   "Заблокированная команда": ["Blocked command", "Bloklangan buyruq"],
   "Работает, но Panda не дали выполнить команду": ["Works, but Panda was not allowed to run a command", "Ishlayapti, lekin Panda'ga buyruqni bajarishga ruxsat berilmadi"],
-  "Скопируйте диагностику и отправьте разработчику — по ней видно, какая команда заблокирована.": ["Copy the diagnostics and send them to the developer — they show which command was blocked.", "Diagnostikani nusxalab, dasturchiga yuboring — unda qaysi buyruq bloklangani ko'rinadi."]
+  "Скопируйте диагностику и отправьте разработчику — по ней видно, какая команда заблокирована.": ["Copy the diagnostics and send them to the developer — they show which command was blocked.", "Diagnostikani nusxalab, dasturchiga yuboring — unda qaysi buyruq bloklangani ko'rinadi."],
+  "не ниже медианы": ["not below the median", "medianadan kam emas"],
+  "спред записан у": ["spread recorded on", "spred yozilgan"],
+  "оценка: у брокера нет спреда в истории": ["estimate: the broker has no spread in history", "taxmin: brokerda tarixda spred yo'q"],
+  "Это поверх commission/slippage, заданных в strategy(…). Без издержек результата нет. На Raw/ECN-счёте брокер берёт ещё и комиссию за лот — переведите её в % от объёма или задайте в strategy(…).": ["This is on top of commission/slippage set in strategy(…). Without costs there is no result. On a Raw/ECN account the broker also charges a commission per lot — convert it to % of volume or set it in strategy(…).", "Bu strategy(…) dagi commission/slippage ustiga qo'shiladi. Xarajatlarsiz natija yo'q. Raw/ECN hisobida broker lot uchun komissiya ham oladi — uni hajmdan % ga aylantiring yoki strategy(…) da bering."]
 };

@@ -641,9 +641,15 @@ async function runValidation(job, spec) {
   if (cells.every(c => c.error)) throw new Error(`Скрипт падает на всех наборах: ${cells[0].error}`);
   const spreadBy = new Map(); for (const b of bars) if (b.spread > 0) spreadBy.set(Math.floor(b.openTime / 1000), b.spread);
   const c = spec.costs || {};
-  const usePerBar = (c.spread === null || c.spread === undefined || c.spread === '') && spreadBy.size > bars.length * 0.5;
-  const costs = { spread: usePerBar ? medianOf([...spreadBy.values()]) : Math.max(0, Number(c.spread) || 0), slip: Math.max(0, Number(c.slip) || 0), commPct: Math.max(0, Number(c.commPct) || 0),
-    spreadAt: usePerBar ? t => spreadBy.get(t) : null, source: usePerBar ? 'спред брокера по барам' : 'заданы вручную' };
+  // per-bar broker spread: MT5 history often stores 0 (or the bar's minimum) on older bars, especially on raw/ECN accounts →
+  // never charge less than the median non-zero spread; spikes above it (news, rollover) are charged as recorded
+  const wantPerBar = c.spread === null || c.spread === undefined || c.spread === '';
+  const med = medianOf([...spreadBy.values()]), cover = bars.length ? spreadBy.size / bars.length : 0;
+  let costs;
+  if (wantPerBar && Number.isFinite(med)) costs = { spread: med, spreadAt: t => Math.max(spreadBy.get(t) || 0, med), source: 'спред брокера по барам', coverage: cover };
+  else if (wantPerBar) costs = { spread: +(bars[bars.length - 1].close * 0.0001).toPrecision(2), spreadAt: null, source: 'оценка: у брокера нет спреда в истории' };
+  else costs = { spread: Math.max(0, Number(c.spread) || 0), spreadAt: null, source: 'заданы вручную' };
+  Object.assign(costs, { slip: Math.max(0, Number(c.slip) || 0), commPct: Math.max(0, Number(c.commPct) || 0) });
   const days = [...new Set(bars.map(b => Math.floor(b.openTime / 86400000)))];
   const all = loadTrials(), key = trialsKey(code, symbol, interval), prev = all[key] || { trials: 0, runs: [] };
   const report = buildReport({ axes: spec.axes, cells, costs, trialsBefore: prev.trials, minTrades: 10,

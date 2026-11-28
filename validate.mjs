@@ -169,7 +169,7 @@ export function buildReport(inp) {
   wf.wfe = wf.isSharpe > 0 ? wf.oosSharpe / wf.isSharpe : NaN;
   wf.rho = mean(okF.map(f => f.rho).filter(fin));
 
-  let rep = { grid: { axes, total: G.total, dims: G.dims }, trials: N, costs: { spread: costs.spread || 0, slip: costs.slip || 0, commPct: costs.commPct || 0, perBar: !!costs.spreadAt, source: costs.source || '' },
+  let rep = { grid: { axes, total: G.total, dims: G.dims }, trials: N, costs: { spread: costs.spread || 0, slip: costs.slip || 0, commPct: costs.commPct || 0, perBar: !!costs.spreadAt, source: costs.source || '', coverage: costs.coverage },
     cells: cells.map((c, i) => ({ inputs: c.inputs, idx: G.idx[i], error: c.error, ...full[i], smooth: region ? region.smooth[i] : NaN, inRegion: region ? region.cells.includes(i) : false })),
     region: null, wf, bars: { from: bars.from, to: bars.to, count: bars.count, ann: bars.ann, capital: bars.capital } };
   if (!region) return finish(rep, null, inp);
