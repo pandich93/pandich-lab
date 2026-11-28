@@ -5,12 +5,14 @@ Protocol: one JSON object per line on stdin  -> one JSON object per line on stdo
   {"id": 2, "cmd": "symbols"}                                -> Market Watch symbols
   {"id": 3, "cmd": "rates", "symbol": "XAUUSD", "tf": "15m", "count": 1500}
   {"id": 4, "cmd": "info", "symbol": "XAUUSD"}
+  {"id": 5, "cmd": "find", "terms": ["NAS", "NAS100", "USTEC"], "limit": 20}  -> all broker symbols matching (not only Market Watch)
 Times are returned exactly as MT5 gives them (trade-server time, seconds); the Node side
 converts to UTC with the detected offset. This script never sends trade requests.
 """
 import sys
 import json
 import time
+import re
 
 try:
     import MetaTrader5 as mt5
@@ -82,6 +84,29 @@ def handle(req):
             if s.visible:
                 out.append({"name": s.name, "desc": s.description, "digits": s.digits, "path": s.path})
         return ok(i, out)
+    if cmd == "find":
+        # search the broker's whole symbol list by name and description; terms[0] is what the user typed, the rest are aliases
+        terms = [re.sub(r"[^A-Z0-9]", "", str(t).upper()) for t in (req.get("terms") or [])]
+        terms = [t for t in terms if t]
+        lim = max(1, min(int(req.get("limit", 20)), 100))
+        hits = []
+        for s in (mt5.symbols_get() or []) if terms else []:
+            n = re.sub(r"[^A-Z0-9]", "", s.name.upper())
+            d = re.sub(r"[^A-Z0-9]", "", (s.description or "").upper())
+            best = 0.0
+            for k, t in enumerate(terms):
+                w = 1.0 if k == 0 else 0.85
+                if n == t: sc = 100
+                elif n.startswith(t): sc = 80 - min(len(n) - len(t), 20)
+                elif t in n: sc = 60 - min(len(n) - len(t), 20)
+                elif len(t) >= 3 and t in d: sc = 35
+                else: continue
+                best = max(best, sc * w)
+            if best > 0:
+                hits.append((best, s))
+        hits.sort(key=lambda x: (-x[0], not x[1].visible, x[1].name))
+        return ok(i, [{"name": s.name, "desc": s.description, "path": s.path, "digits": s.digits,
+                       "visible": bool(s.visible), "score": round(sc, 1)} for sc, s in hits[:lim]])
     if cmd == "info":
         s = mt5.symbol_info(req["symbol"])
         if s is None:
@@ -92,6 +117,8 @@ def handle(req):
         sym, tf, count = req["symbol"], req["tf"], int(req.get("count", 1500))
         if tf not in TF:
             return err(i, "unsupported timeframe %s" % tf)
+        if mt5.symbol_info(sym) is None:
+            return err(i, "NOSYM %s" % sym)  # not on this broker's server at all — Node side suggests similar names
         if not mt5.symbol_select(sym, True):
             return err(i, "symbol_select(%s) failed: %s" % (sym, mt5.last_error()))
         r = mt5.copy_rates_from_pos(sym, TF[tf], 0, max(1, min(count, 50000)))

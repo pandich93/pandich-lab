@@ -807,5 +807,10 @@ window.QL_I18N_DICT = {
   "Следующий бар (→, Shift+→ — 10 баров)": ["Next bar (→, Shift+→ — 10 bars)", "Keyingi bar (→, Shift+→ — 10 bar)"],
   "Старт / пауза (Пробел)": ["Start / pause (Space)", "Start / pauza (Probel)"],
   "Стоп-лосс — цена (пусто = без стопа)": ["Stop-loss — price (empty = no stop)", "Stop-loss — narx (bo'sh = stopsiz)"],
-  "Тейк-профит — цена (пусто = без тейка)": ["Take-profit — price (empty = no take)", "Teyk-profit — narx (bo'sh = teyksiz)"]
+  "Тейк-профит — цена (пусто = без тейка)": ["Take-profit — price (empty = no take)", "Teyk-profit — narx (bo'sh = teyksiz)"],
+
+  // ── broker symbol search
+  "У брокера": ["Broker", "Brokerda"],
+  "Символа «{0}» у брокера {1} нет. Похожие: {2}. Выберите нужный в поиске символа.": ["Symbol \"{0}\" is not available at broker {1}. Similar: {2}. Pick the right one in symbol search.", "«{0}» belgisi {1} brokerida yo'q. O'xshashlari: {2}. Belgi qidiruvidan keraklisini tanlang."],
+  "Символа «{0}» у брокера {1} нет.": ["Symbol \"{0}\" is not available at broker {1}.", "«{0}» belgisi {1} brokerida yo'q."]
 };

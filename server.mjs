@@ -250,10 +250,39 @@ function sourceFor(symbol) {
   return MT5.ready ? 'mt5' : 'binance';
 }
 
+// Broker symbol names differ (NAS100 / USTEC / US100, XAUUSD / XAUUSDm / GOLD…): search the whole server list with aliases
+const SYM_ALIASES = [
+  ['NAS100', 'USTEC', 'US100', 'NDX', 'NASDAQ', 'USTECH', 'NAS'], ['US30', 'DJ30', 'DJI', 'WS30', 'DOW', 'USA30'],
+  ['US500', 'SPX500', 'SP500', 'SPX', 'USA500'], ['GER40', 'DE40', 'DAX', 'GER30', 'DE30'], ['UK100', 'FTSE', 'FTSE100'],
+  ['JP225', 'JPN225', 'NIKKEI', 'N225'], ['XAUUSD', 'GOLD', 'XAU'], ['XAGUSD', 'SILVER', 'XAG'],
+  ['USOIL', 'WTI', 'XTIUSD', 'OIL'], ['UKOIL', 'BRENT', 'XBRUSD'], ['BTCUSD', 'BTC', 'BITCOIN'], ['ETHUSD', 'ETH'],
+];
+const symNorm = x => String(x || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+function symTerms(q) {
+  const n = symNorm(q), terms = n ? [n] : [];
+  for (const g of SYM_ALIASES) if (g.some(a => a === n || (n.length >= 3 && a.startsWith(n)))) for (const a of g) if (!terms.includes(a)) terms.push(a);
+  return terms;
+}
+async function mt5Find(q, limit = 20) {
+  if (!symNorm(q) || (!MT5.ready && !(await startMT5()))) return [];
+  try { return await mt5Call('find', { terms: symTerms(q), limit }, 20000); } catch { return []; }
+}
+MT5.alias = new Map(); // what the user typed → the broker's real name (suffix-only differences)
 async function fetchMT5(symbol, interval, count) {
   if (!MT5.ready && !(await startMT5())) throw new Error(`MT5 недоступен: ${MT5.error || 'bridge not started'}`);
-  const real = MT5.symbols.get(symbol)?.name || symbol;
-  const r = await mt5Call('rates', { symbol: real, tf: interval, count });
+  let real = MT5.symbols.get(symbol)?.name || MT5.alias.get(symbol) || symbol, r;
+  try { r = await mt5Call('rates', { symbol: real, tf: interval, count }); }
+  catch (e) {
+    if (!/^NOSYM/.test(e.message)) throw e;
+    const found = await mt5Find(symbol, 8), n = symNorm(symbol), broker = MT5.info?.server || 'MT5';
+    // same name in another letter case (NAS100M → NAS100m), or with a broker prefix/suffix (XAUUSD → XAUUSDm) — opened automatically
+    const auto = found.find(f => symNorm(f.name) === n) || found.find(f => { const fn = symNorm(f.name); return fn.length - n.length <= 4 && (fn.startsWith(n) || fn.endsWith(n)) && n.length >= 4; });
+    if (!auto) throw new Error(found.length ? `Символа «${symbol}» у брокера ${broker} нет. Похожие: ${found.slice(0, 5).map(f => f.name).join(', ')}. Выберите нужный в поиске символа.` : `Символа «${symbol}» у брокера ${broker} нет.`);
+    real = auto.name; MT5.alias.set(symbol, real);
+    if (!MT5.symbols.has(real.toUpperCase())) MT5.symbols.set(real.toUpperCase(), { name: real, desc: auto.desc, digits: auto.digits, path: auto.path || '' });
+    console.log(`MT5: ${symbol} → ${real}`);
+    r = await mt5Call('rates', { symbol: real, tf: interval, count });
+  }
   const off = MT5.offset, stepMs = INTERVALS[interval] * 1000, out = new Array(r.t.length);
   for (let i = 0; i < r.t.length; i++) {
     const openTime = (r.t[i] - off) * 1000;
@@ -1632,6 +1661,10 @@ const server = http.createServer(async (req, res) => {
           last: t.close, open: t.open, high: t.high, low: t.low, prevClose: y ? y.close : null,
           change: y ? t.close - y.close : null, changePct: y && y.close ? (t.close - y.close) / y.close * 100 : null, digits: digitsFor(symbol, t.close) });
       } catch (e) { return sendJSON(res, 200, { ok: false, error: e.message }); }
+    }
+    if (req.method === 'GET' && url.pathname === '/api/symbols/find') {
+      const q = url.searchParams.get('q') || '';
+      return sendJSON(res, 200, { ok: true, q, items: await mt5Find(q, 20) });
     }
     if (req.method === 'GET' && url.pathname === '/api/symbols') {
       if (!MT5.ready) await startMT5();

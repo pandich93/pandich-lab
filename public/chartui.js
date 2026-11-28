@@ -100,6 +100,21 @@ modal.innerHTML = `<div class="ss-box">
 </div>`;
 document.querySelector('.workspace').appendChild(modal);
 let ssTab = 'all', ssSel = 0, ssItems = [];
+// whole broker list (not only Market Watch): asked from MT5 as you type, shown under the local matches
+const brokerHits = { q: '', items: [] }; let brokerTimer = null;
+function askBroker(q) {
+  clearTimeout(brokerTimer);
+  const mt5Ready = S.symbols && S.symbols.mt5 && S.symbols.mt5.ready;
+  if (!mt5Ready || q.length < 2) { brokerHits.q = q; brokerHits.items = []; return; }
+  if (brokerHits.q === q) return;
+  brokerTimer = setTimeout(async () => {
+    try {
+      const r = await api('/api/symbols/find?q=' + encodeURIComponent(q));
+      if (norm($('ssInput').value) !== q) return;
+      brokerHits.q = q; brokerHits.items = r.items || []; renderSS();
+    } catch { /* MT5 busy */ }
+  }, 250);
+}
 const quoteCache = new Map();
 const norm = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 function allSymbols() {
@@ -117,6 +132,9 @@ function renderSS() {
   ssItems = allSymbols().filter(s => (ssTab === 'all' || s.cat === ssTab) && (!q || norm(s.name).includes(q) || norm(s.desc).includes(q)));
   // exact/prefix matches first
   ssItems.sort((a, b) => (norm(b.name).startsWith(q) ? 1 : 0) - (norm(a.name).startsWith(q) ? 1 : 0));
+  askBroker(q);
+  if (q && ssTab === 'all' && brokerHits.q === q)
+    for (const h of brokerHits.items) if (!ssItems.some(x => norm(x.name) === norm(h.name))) ssItems.push({ name: h.name, desc: h.desc || '', cat: 'У брокера', src: 'MT5', broker: true });
   if (q && !ssItems.some(s => norm(s.name) === q)) ssItems.push({ name: $('ssInput').value.trim().toUpperCase(), desc: 'Открыть как есть (MT5 или Binance)', cat: '—', src: '?', raw: true });
   ssSel = Math.max(0, Math.min(ssSel, ssItems.length - 1));
   const dot = s => { const h = [...s.name].reduce((a, c) => a + c.charCodeAt(0), 0) % 360; return `<span class="ss-dot" style="background:hsl(${h},55%,42%)">${esc(s.name.replace(/[^A-Za-z]/g, '').slice(0, 2) || '?')}</span>`; };
