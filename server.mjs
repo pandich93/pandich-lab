@@ -230,6 +230,10 @@ function applyOffset(off) {
   if (typeof CFG.mt5UtcOffsetHours === 'number') { MT5.offset = CFG.mt5UtcOffsetHours * 3600; MT5.offsetKnown = true; return; }
   const f = path.join(HOME, 'mt5_offset.json');
   if (typeof off === 'number') {
+    if (MT5.offsetKnown && off !== MT5.offset) { // offset changed (DST, reconnect): bars cached with the old one would be shifted
+      console.log(`MT5: server offset ${MT5.offset / 3600}h → ${off / 3600}h, clearing cached MT5 bars`);
+      for (const [k, e] of barCache) if (e.src === 'mt5') barCache.delete(k);
+    }
     MT5.offset = off; MT5.offsetKnown = true;
     try { fs.writeFileSync(f, JSON.stringify({ offset: off, at: new Date().toISOString() })); } catch { /* ignore */ }
   } else if (!MT5.offsetKnown) {

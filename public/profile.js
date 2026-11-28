@@ -26,15 +26,9 @@
   setInterval(() => { if (!O.on) return; const b = S.bars[S.bars.length - 1]; const s2 = b ? `${S.symbol}|${S.interval}|${S.bars.length}|${b.time}|${b.close}` : ''; if (s2 !== sig) { sig = s2; cache = null; requestDraw(); } }, 2000);
 
   const ts = () => chart.timeScale();
-  function xOf(t) { // unix sec → x (interpolated between bars, beyond the last bar by bar step)
-    const b = S.bars, n = b.length; if (!n) return null;
-    const step = n > 1 ? b[n - 1].time - b[n - 2].time : 60;
-    let li;
-    if (t <= b[0].time) li = (t - b[0].time) / step;
-    else if (t >= b[n - 1].time) li = n - 1 + (t - b[n - 1].time) / step;
-    else { let lo = 0, hi = n - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (b[m].time <= t) lo = m; else hi = m; } li = lo + (t - b[lo].time) / (b[hi].time - b[lo].time); }
-    return ts().logicalToCoordinate(li);
-  }
+  // x of a bar that exists on the chart (exact series time) — immune to other series adding their own timestamps
+  const X = t => (t === null || t === undefined ? null : ts().timeToCoordinate(t));
+  const barSpacing = () => (ts().options().barSpacing || 6);
   function profiles() {
     if (O.mode === 'visible') {
       const r = ts().getVisibleLogicalRange(); if (!r) return [];
@@ -59,9 +53,13 @@
     g.font = '10px Inter, system-ui, sans-serif'; g.textBaseline = 'middle';
     const list = profiles();
     for (const p of list) {
-      let x0 = O.mode === 'visible' ? null : xOf(p.from), x1 = O.mode === 'visible' ? null : xOf(p.to);
+      const bs = barSpacing();
+      // the profile spans its own bars: from the first bar of the period to the end of its last bar
+      let x0 = O.mode === 'visible' ? null : X(p.first), x1 = O.mode === 'visible' ? null : (X(p.lastBar) === null ? null : X(p.lastBar) + bs / 2);
+      if (x0 !== null) x0 -= bs / 2;
       if (O.mode === 'visible') { x1 = w - 4; x0 = w - Math.max(80, w * 0.22); }
-      if (x0 === null || x1 === null || x1 < 0 || x0 > w) { if (!(O.naked && !p.touched)) continue; }
+      if (x0 === null || x1 === null || x1 < x0) continue;
+      if ((x1 < 0 || x0 > w) && !(O.naked && !p.touched && !p.forming)) continue;
       const span = Math.max(4, (x1 ?? 0) - (x0 ?? 0)), maxW = span * Math.min(0.95, (+O.width || 60) / 100);
       const yTop = Y(p.rows[p.rows.length - 1].p + p.step), yBot = Y(p.rows[0].p);
       const rowH = yTop !== null && yBot !== null ? Math.max(1, Math.abs(yBot - yTop) / p.rows.length) : 1;
@@ -79,15 +77,16 @@
         const y = Y(price); if (y === null || from === null) return;
         const a = Math.max(0, from), b = Math.min(w, to ?? w); if (b <= a) return;
         g.strokeStyle = color; g.lineWidth = 1; g.setLineDash(dash); g.beginPath(); g.moveTo(a, y + 0.5); g.lineTo(b, y + 0.5); g.stroke(); g.setLineDash([]);
-        if (label && b - a > 40) { g.fillStyle = color; g.textAlign = 'right'; g.fillText(label, b - 2, y - 6); }
+        if (label && b - a > 64) { g.fillStyle = color; g.textAlign = 'right'; g.fillText(label, b - 2, y - 6); }
       };
       const lx0 = O.mode === 'visible' ? x0 : x0, lx1 = O.mode === 'visible' ? x1 : x1;
       if (O.poc) line(p.poc, '#ff9800', [], lx0, lx1, `POC ${fmtP(p.poc, p.step)}`);
       if (O.va_lines) { line(p.vah, 'rgba(41,98,255,.9)', [4, 3], lx0, lx1, `VAH ${fmtP(p.vah, p.step)}`); line(p.val, 'rgba(41,98,255,.9)', [4, 3], lx0, lx1, `VAL ${fmtP(p.val, p.step)}`); }
-      if (O.ib && O.mode !== 'visible' && p.ibH !== null) { const ibX1 = xOf(p.from + 3600); line(p.ibH, 'rgba(178,181,190,.8)', [1, 3], x0, ibX1, ''); line(p.ibL, 'rgba(178,181,190,.8)', [1, 3], x0, ibX1, ''); }
+      if (O.ib && O.mode !== 'visible' && p.ibH !== null) { const ibX1 = Math.min(x1, x0 + Math.max(1, Math.round(3600 / (p.tf || 3600))) * bs); line(p.ibH, 'rgba(178,181,190,.8)', [1, 3], x0, ibX1, ''); line(p.ibL, 'rgba(178,181,190,.8)', [1, 3], x0, ibX1, ''); }
       // naked POC: extended to the right until price trades through it
-      if (O.naked && O.mode !== 'visible' && x1 !== null) {
-        const end = p.touched ? xOf(p.touched) : w;
+      if (O.naked && O.mode !== 'visible' && !p.forming) {
+        const end = p.touched ? X(p.touched) : w;
+        if (end === null) continue;
         if (end > x1) line(p.poc, 'rgba(255,152,0,.55)', [6, 4], x1, end, p.touched ? '' : `nPOC ${fmtP(p.poc, p.step)}`);
       }
     }

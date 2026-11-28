@@ -33,21 +33,28 @@ MAX_HOURS = 14 * 3600
 
 
 def detect_offset():
-    """Server-time minus UTC, rounded to 30 min, from the freshest Market Watch tick. None if no fresh tick."""
-    best = 0
+    """Server-time minus UTC, rounded to 30 min, from fresh Market Watch ticks. None if it can't be trusted.
+    A tick that is simply old (market closed) can still land near a half-hour step by chance, so at least two
+    symbols must agree (or the only visible symbol must be fresh)."""
+    now = time.time()
+    votes, seen = {}, 0
     for s in mt5.symbols_get() or []:
         if not s.visible:
             continue
         t = mt5.symbol_info_tick(s.name)
-        if t is not None and t.time > best:
-            best = t.time
-    if not best:
+        if t is None or not t.time:
+            continue
+        seen += 1
+        diff = t.time - now
+        off = int(round(diff / 1800.0) * 1800)
+        if abs(off) <= MAX_HOURS and abs(diff - off) <= 120:
+            votes[off] = votes.get(off, 0) + 1
+    if not votes:
         return None
-    diff = best - time.time()
-    off = int(round(diff / 1800.0) * 1800)
-    if abs(off) > MAX_HOURS or abs(diff - off) > 120:  # stale tick (market closed) → can't trust it
-        return None
-    return off
+    off, n = max(votes.items(), key=lambda kv: kv[1])
+    if n >= 2 or seen == 1:
+        return off
+    return None
 
 
 def ok(i, data):

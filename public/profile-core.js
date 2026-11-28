@@ -60,6 +60,9 @@
   function compute(bars, opts = {}) {
     const o = { mode: 'day', basis: 'tpo', va: 70, ibMin: 60, period: 1800, last: 10, ...opts };
     if (!bars || !bars.length) return [];
+    // defensive: strictly increasing times (a live merge or an offset change must not create duplicates / disorder)
+    let ordered = true; for (let i = 1; i < bars.length; i++) if (!(bars[i].time > bars[i - 1].time)) { ordered = false; break; }
+    if (!ordered) { const m = new Map(); for (const b of bars) m.set(b.time, b); bars = [...m.values()].sort((a, b) => a.time - b.time); }
     const src = o.mode === 'visible' && o.range ? bars.filter(b => b.time >= o.range.from && b.time <= o.range.to) : bars;
     if (!src.length) return [];
     if (!(o.step > 0)) o.step = o.mode === 'visible' ? niceStep((Math.max(...src.map(b => b.high)) - Math.min(...src.map(b => b.low))) / 70) : autoStep(bars.slice(-3000), o.mode);
@@ -75,8 +78,11 @@
     }
     const out = groups.map(g => build(g, o)).filter(Boolean);
     // naked POC: not traded through by any later bar
+    const lastT = bars[bars.length - 1].time;
     for (const p of out) {
-      p.touched = null;
+      p.touched = null; p.forming = p.to > lastT + tf; // the current, unfinished profile is never "naked"
+      p.tf = tf;
+      if (p.forming) continue;
       for (const b of bars) { if (b.time < p.to) continue; if (b.low <= p.poc && b.high >= p.poc) { p.touched = b.time; break; } }
     }
     return out;
