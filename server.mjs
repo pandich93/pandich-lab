@@ -8,6 +8,8 @@ import { spawn } from 'node:child_process';
 import os from 'node:os';
 import { PineTS, Indicator, BaseProvider } from 'pinets';
 import { buildReport } from './validate.mjs';
+import { createRequire } from 'node:module';
+const PCore = createRequire(import.meta.url)('./public/profile-core.js'); // Market Profile (shared with the chart)
 
 // ── recent server log lines (Settings → «Скопировать диагностику»)
 const LOGBUF = [];
@@ -1111,6 +1113,50 @@ async function callClaude(model, messages) {
 }
 
 // ── Backend A: Claude Code CLI (subscription login). Agent tests code via `node ql.mjs run …` → /api/agent/run
+// ───────── journal: every Panda chat is kept on disk (messages, runs, validation / research results) ─────────
+const JOURNAL_DIR = path.join(DATA_DIR, 'journal'), JREP_DIR = path.join(JOURNAL_DIR, 'reports');
+fs.mkdirSync(JREP_DIR, { recursive: true });
+const jrId = sid => String(sid || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 60);
+function jrLoad(sid) { const id = jrId(sid); if (!id) return null; try { return JSON.parse(fs.readFileSync(path.join(JOURNAL_DIR, `${id}.json`), 'utf8')); } catch { return null; } }
+function jrSave(j) { j.updated = Date.now(); try { fs.writeFileSync(path.join(JOURNAL_DIR, `${j.id}.json`), JSON.stringify(j)); } catch (e) { console.log(`journal: ${e.message}`); } }
+function jrRecorder(b) {
+  const id = jrId(b.sessionId); if (!id) return () => {};
+  const j = jrLoad(id) || { id, created: Date.now(), title: '', events: [] };
+  const text = String(b.text || '').trim();
+  if (!j.title) j.title = text.replace(/\s+/g, ' ').slice(0, 90) || 'Чат';
+  Object.assign(j, { symbol: String(b.symbol || '').toUpperCase(), interval: normTf(b.interval) || b.interval || '' });
+  j.events.push({ t: Date.now(), k: 'user', text: text.slice(0, 20000), mode: b.mode || '', images: Array.isArray(b.images) ? b.images.length : 0 });
+  jrSave(j);
+  let dirty = false, timer = null;
+  const flush = () => { clearTimeout(timer); timer = null; if (dirty) { dirty = false; if (j.events.length > 600) j.events = j.events.slice(-600); jrSave(j); } };
+  const rec = ev => {
+    const t = Date.now();
+    if (ev.type === 'text') j.events.push({ t, k: 'ai', text: String(ev.text).slice(0, 20000) });
+    else if (ev.type === 'run') j.events.push({ t, k: 'run', ok: !!ev.ok, summary: String(ev.summary || '').slice(0, 3000) });
+    else if (ev.type === 'script') j.events.push({ t, k: 'script', name: ev.name || '' });
+    else if (ev.type === 'chart') j.events.push({ t, k: 'chart', symbol: ev.symbol, interval: ev.interval });
+    else if (ev.type === 'error') j.events.push({ t, k: 'error', text: String(ev.text || '').slice(0, 2000) });
+    else if (ev.type === 'validation' && ev.report) {
+      const job = jrId(ev.job) || 'v' + t.toString(36);
+      try { fs.writeFileSync(path.join(JREP_DIR, `${job}.json`), JSON.stringify(ev.report)); } catch { /* disk */ }
+      const R = ev.report.region;
+      j.events.push({ t, k: 'validation', job, title: ev.report.meta && ev.report.meta.title, verdict: ev.report.verdict, region: R ? { mean: R.mean, se: R.se, size: R.size, center: R.center } : null, dsr: ev.report.dsr ? ev.report.dsr.deflated : null, wf: ev.report.wf ? ev.report.wf.oosSharpe : null });
+    } else if (ev.type === 'research' && ev.research) {
+      const last = j.events.findLast ? j.events.findLast(e => e.k === 'research' && e.id === ev.research.id) : null;
+      if (last) last.t = t; else j.events.push({ t, k: 'research', id: ev.research.id, goal: ev.research.goal });
+    } else if (ev.type === 'done') { flush(); return; }
+    else return;
+    dirty = true; if (!timer) timer = setTimeout(flush, 1500);
+  };
+  rec.finish = () => { const st = live.get(id); if (st && st.ccSession && j.ccSession !== st.ccSession) { j.ccSession = st.ccSession; dirty = true; } flush(); };
+  return rec;
+}
+function jrList() {
+  let files = []; try { files = fs.readdirSync(JOURNAL_DIR).filter(f => f.endsWith('.json')); } catch { /* none */ }
+  return files.map(f => { try { const j = JSON.parse(fs.readFileSync(path.join(JOURNAL_DIR, f), 'utf8')); return { id: j.id, title: j.title, created: j.created, updated: j.updated, symbol: j.symbol, interval: j.interval, n: j.events.filter(e => e.k === 'user').length, checks: j.events.filter(e => e.k === 'validation' || e.k === 'research').length }; } catch { return null; } })
+    .filter(Boolean).sort((a, b) => b.updated - a.updated);
+}
+
 const live = new Map(); // sid → { chart, emit, lastGood, ccSession }
 let lastActiveSid = null;
 // ql.mjs passes QL_SID from env; if the Bash tool did not inherit it, fall back to the session currently running
@@ -1182,6 +1228,15 @@ async function chartContext(st) {
   const sw = swings(bars);
   L.push(`Recent swing highs (5/5 fractal): ${sw.hi.map(b => `${f(b.high)}@${isoMin(b.openTime).slice(5)}`).join(', ') || 'none'}`);
   L.push(`Recent swing lows  (5/5 fractal): ${sw.lo.map(b => `${f(b.low)}@${isoMin(b.openTime).slice(5)}`).join(', ') || 'none'}`);
+  try { // Market Profile by UTC day (TPO, 30-min brackets): POC / value area / initial balance + naked POCs
+    const pb = bars.map(b => ({ time: Math.floor(b.openTime / 1000), open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume }));
+    const pr = INTERVALS[interval] <= 3600 ? PCore.compute(pb, { mode: 'day', last: 6 }) : [];
+    if (pr.length) {
+      L.push(`Market profile (TPO by UTC day, VA 70%, row ${pr[0].step}): ` + pr.slice(-3).map(p => `${new Date(p.from * 1000).toISOString().slice(5, 10)} POC ${f(p.poc)} VAH ${f(p.vah)} VAL ${f(p.val)}${p.ibH !== null ? ` IB ${f(p.ibL)}–${f(p.ibH)}` : ''}`).join('; '));
+      const naked = pr.slice(0, -1).filter(p => !p.touched);
+      if (naked.length) L.push(`Naked POCs (not traded through since): ${naked.map(p => `${f(p.poc)} (${new Date(p.from * 1000).toISOString().slice(5, 10)})`).join(', ')}`);
+    }
+  } catch (e) { L.push(`Market profile unavailable: ${e.message}`); }
   const cs = st.clientState || {};
   if (Array.isArray(cs.scripts) && cs.scripts.length) L.push(`Indicators on chart: ${cs.scripts.map(s => `${s.name}${s.visible ? '' : ' (hidden)'}`).join('; ')}`);
   if (Array.isArray(cs.drawings) && cs.drawings.length) L.push(`User drawings: ${cs.drawings.slice(0, 40).map(dr => `${dr.type}[${dr.pts.map(p => `${isoMin(p.t * 1000).slice(5)}→${f(p.p)}`).join(' | ')}]${dr.style?.text ? ` "${dr.style.text}"` : ''}`).join('; ')}`);
@@ -1221,7 +1276,7 @@ async function buildDrawing(st, spec) {
 async function agentTurnClaudeCode(body, emit) {
   const sid = String(body.sessionId || 'default');
   const model = CFG.models.includes(body.model) ? body.model : CFG.defaultModel;
-  const st = live.get(sid) || { ccSession: null };
+  const st = live.get(sid) || { ccSession: (jrLoad(sid) || {}).ccSession || null }; // a chat continued from the journal resumes its Claude Code session
   st.chart = { symbol: String(body.symbol || 'BTCUSDT').toUpperCase(), interval: normTf(body.interval) || '15m', limit: body.limit };
   st.emit = emit; st.lastGood = null;
   live.set(sid, st);
@@ -1820,6 +1875,9 @@ const STATIC = {
   '/settings.js': ['public/settings.js', 'text/javascript; charset=utf-8'],
   '/validate.js': ['public/validate.js', 'text/javascript; charset=utf-8'],
   '/watchlist.js': ['public/watchlist.js', 'text/javascript; charset=utf-8'],
+  '/profile-core.js': ['public/profile-core.js', 'text/javascript; charset=utf-8'],
+  '/profile.js': ['public/profile.js', 'text/javascript; charset=utf-8'],
+  '/journal.js': ['public/journal.js', 'text/javascript; charset=utf-8'],
   '/i18n.js': ['public/i18n.js', 'text/javascript; charset=utf-8'],
   '/i18n-dict.js': ['public/i18n-dict.js', 'text/javascript; charset=utf-8'],
   '/style.css': ['public/style.css', 'text/css; charset=utf-8'],
@@ -1921,6 +1979,36 @@ const server = http.createServer(async (req, res) => {
           symbols: [...MT5.symbols.values()].map(s => ({ name: s.name, desc: s.desc, path: s.path || '' })) },
         crypto: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'PAXGUSDT'],
       });
+    }
+    if (req.method === 'GET' && url.pathname === '/api/journal') return sendJSON(res, 200, { ok: true, list: jrList() });
+    if (req.method === 'GET' && url.pathname === '/api/journal/search') {
+      const q = String(url.searchParams.get('q') || '').toLowerCase().trim(); if (q.length < 2) return sendJSON(res, 200, { ok: true, hits: [] });
+      const hits = [];
+      for (const it of jrList()) {
+        const j = jrLoad(it.id); if (!j) continue;
+        const e = j.events.find(x => (x.k === 'user' || x.k === 'ai') && String(x.text).toLowerCase().includes(q)) || (String(j.title).toLowerCase().includes(q) ? j.events[0] : null);
+        if (!e) continue;
+        const txt = String(e.text || ''), i = Math.max(0, txt.toLowerCase().indexOf(q) - 60);
+        hits.push({ ...it, snippet: (i ? '…' : '') + txt.slice(i, i + 180).replace(/\s+/g, ' ') });
+        if (hits.length >= 50) break;
+      }
+      return sendJSON(res, 200, { ok: true, hits });
+    }
+    if (req.method === 'GET' && url.pathname.startsWith('/api/journal/report/')) {
+      try { return sendJSON(res, 200, { ok: true, report: JSON.parse(fs.readFileSync(path.join(JREP_DIR, `${jrId(url.pathname.slice(20))}.json`), 'utf8')) }); } catch { return sendJSON(res, 200, { ok: false, error: 'отчёт не найден' }); }
+    }
+    if (req.method === 'GET' && url.pathname.startsWith('/api/journal/')) {
+      const j = jrLoad(url.pathname.slice(13)); return sendJSON(res, 200, j ? { ok: true, journal: j } : { ok: false, error: 'нет такого чата' });
+    }
+    if (req.method === 'POST' && (url.pathname === '/api/journal-delete' || url.pathname === '/api/journal-rename')) {
+      if (!localOrigin(req)) return sendJSON(res, 403, { error: 'forbidden origin' });
+      const b = await readBody(req), j = jrLoad(b.id); if (!j) return sendJSON(res, 200, { ok: false, error: 'нет такого чата' });
+      if (url.pathname === '/api/journal-delete') {
+        const trash = path.join(JOURNAL_DIR, '_deleted'); fs.mkdirSync(trash, { recursive: true });
+        try { fs.renameSync(path.join(JOURNAL_DIR, `${j.id}.json`), path.join(trash, `${j.id}.json`)); } catch (e) { return sendJSON(res, 200, { ok: false, error: e.message }); }
+        live.delete(j.id); return sendJSON(res, 200, { ok: true });
+      }
+      j.title = String(b.title || '').slice(0, 120) || j.title; jrSave(j); return sendJSON(res, 200, { ok: true });
     }
     if (req.method === 'GET' && url.pathname === '/api/research') return sendJSON(res, 200, { ok: true, list: rsList() });
     if (req.method === 'GET' && url.pathname.startsWith('/api/research/')) {
@@ -2076,9 +2164,11 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/chat') {
       const b = await readBody(req);
       res.writeHead(200, { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-cache' });
-      const emit = ev => res.write(JSON.stringify(ev) + '\n');
+      const rec = jrRecorder(b);
+      const emit = ev => { res.write(JSON.stringify(ev) + '\n'); try { rec(ev); } catch { /* journal is best-effort */ } };
       try { await agentTurn(b, emit); AG.lastOk = Date.now(); emit({ type: 'done' }); }
       catch (e) { const m = e && e.message ? e.message : String(e); AG.lastErr = m; AG.lastErrAt = Date.now(); emit({ type: 'error', text: m, diag: true }); }
+      if (rec.finish) rec.finish();
       return res.end();
     }
     if (req.method === 'POST' && url.pathname === '/api/admin/restart') {

@@ -1131,7 +1131,23 @@ $('newChatBtn').onclick = async () => {
   msgs.innerHTML = ''; setEmpty(true); examplesOpen = true; renderTasks();
 };
 renderTasks(); autoGrow();
+// a stored chat (journal) → the same markup as live messages
+function restoreChat(events, opts = {}) {
+  msgs.innerHTML = '';
+  for (const e of events || []) {
+    if (e.k === 'user') addMsg('user', (e.images ? `<div class="matt muted">🖼 × ${e.images}</div>` : '') + esc(e.text));
+    else if (e.k === 'ai') addMsg('ai', md(e.text));
+    else if (e.k === 'run') { const d = document.createElement('details'); d.className = 'run ' + (e.ok ? 'ok' : 'bad'); d.innerHTML = `<summary>▶ запуск на графике: <b>${e.ok ? 'OK' : 'ошибка'}</b></summary><pre>${esc(e.summary)}</pre>`; msgs.appendChild(d); }
+    else if (e.k === 'error') addMsg('err', '⚠ ' + esc(e.text));
+    else if (e.k === 'validation' && window.QLJournal) msgs.appendChild(window.QLJournal.validationCard(e));
+    else if (e.k === 'research' && window.QLJournal) msgs.appendChild(window.QLJournal.researchCard(e));
+  }
+  setEmpty(!msgs.children.length);
+  if (!opts.keepScroll) $('chatBody').scrollTop = $('chatBody').scrollHeight;
+}
 window.QLChat = {
+  restore: restoreChat,
+  continueChat(id, events) { S.sessionId = id; store.set('ql.session', id); restoreChat(events); setChatCollapsed(false, { focus: false }); },
   prefill(text, mode) { setChatCollapsed(false, { focus: false }); const tk = LEGACY_TASK[mode] || mode; if (tk && TASKS[tk]) { curTask = tk; store.set('ql.task', curTask); renderTasks(); } const p = $('prompt'); p.value = text; autoGrow(); p.focus(); p.setSelectionRange(p.value.length, p.value.length); },
 };
 

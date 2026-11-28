@@ -749,3 +749,31 @@ tr.running .rs-st{color:#f0b429}
 .rs-f>span{color:var(--muted)}
 .rs-open{margin-top:6px;height:28px}
 .vd-dlg.rs-list{width:640px;height:auto;max-height:min(640px,calc(100vh - 40px))}
+
+/* ───── market profile ───── */
+#profilelayer{position:absolute;left:0;top:0;pointer-events:none;z-index:1}
+.tb-btn.icon.on{color:#ff9800}
+.pf-dlg{width:460px;height:auto;max-height:min(680px,calc(100vh - 40px))}
+.pf-dlg .ind-b input.ind-num{width:90px}
+.pf-dlg .ind-b select{width:250px}
+
+/* ───── journal (chat history) ───── */
+.jr-dlg{width:min(1080px,calc(100vw - 40px));height:min(760px,calc(100vh - 40px))}
+.jr-q{flex:0 1 280px;margin-left:auto;background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:6px 10px;color:var(--text);font:inherit;font-size:12.5px;outline:none}
+.jr-q:focus{border-color:var(--blue)}
+.jr-dlg .ind-h b{flex:none}
+.jr-main{flex:1;min-height:0;display:flex;border-top:1px solid var(--line)}
+.jr-list{width:320px;flex:none;overflow:auto;border-right:1px solid var(--line);padding:6px}
+.jr-it{padding:8px 10px;border-radius:7px;cursor:pointer;margin-bottom:2px}
+.jr-it:hover{background:var(--panel2)}
+.jr-it.on{background:#24272d}
+.jr-t{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.jr-m{font-size:11.5px;color:var(--muted);margin-top:2px}
+.jr-s{font-size:11.5px;color:var(--text);opacity:.8;margin-top:4px;line-height:1.4}
+.jr-view{flex:1;min-width:0;display:flex;flex-direction:column}
+.jr-vh{display:flex;align-items:center;gap:6px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.jr-vh b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.jr-vh .sp{flex:1}
+.jr-vh .ind-btn{height:28px;padding:0 10px;font-size:12px}
+.jr-msgs{flex:1;overflow:auto;padding:12px 16px;display:flex;flex-direction:column;gap:8px}
+.jr-note{font-size:11.5px}
