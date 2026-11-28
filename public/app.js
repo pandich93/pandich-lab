@@ -16,6 +16,9 @@ if (EMBED) document.body.classList.add('embed');
 const K = k => EMBED ? k.replace(/^ql\./, `ql.c${CELL}.`) : k;
 const cget = (k, d) => store.get(K(k), EMBED ? store.get(k, d) : d); // a new cell starts as a copy of the main chart
 
+// first launch on this machine: no saved state yet (checked before anything below writes to storage) — onboard.js shows the welcome tour
+const FRESH = !EMBED && (() => { try { return !Object.keys(localStorage).some(k => k.startsWith('ql.') && k !== 'ql.lang'); } catch { return false; } })();
+
 // ───────── state ─────────
 const S = {
   cell: CELL, embed: EMBED,
@@ -1178,5 +1181,5 @@ setInterval(() => { $('clock').textContent = new Date().toISOString().slice(11, 
   await runAll();
 })();
 if (!EMBED) window.QLHub = QLHub;
-window.QLApp = { setChatCollapsed, replayStart, replayStep, replayStop, barSec, S, CELL, EMBED, MC_ID, mcCfg, QLHub, api, esc, fmt, md, log, chart, candles, newId, saveScripts, runScript, renderAll, selectScript, openInputs, setChart, setChartType, setScale, CHART_TYPES, loadSymbols };
+window.QLApp = { FRESH, setChatCollapsed, replayStart, replayStep, replayStop, barSec, S, CELL, EMBED, MC_ID, mcCfg, QLHub, api, esc, fmt, md, log, chart, candles, newId, saveScripts, runScript, renderAll, selectScript, openInputs, setChart, setChartType, setScale, CHART_TYPES, loadSymbols };
 })();

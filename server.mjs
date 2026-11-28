@@ -1703,6 +1703,9 @@ async function health({ force = false } = {}) {
     }
   }
   if (CFG.backend !== 'api' && !net.anthropic.ok && cl.state !== 'err') Object.assign(cl, { state: 'warn', summary: cl.summary + ' · нет связи с Anthropic', hint: 'Серверы Claude не отвечают: проверьте интернет, фаервол или VPN.' });
+  // plain flags for the welcome tour: is Claude Code installed, and has Panda actually answered since the last error
+  cl.missing = CFG.backend !== 'api' && !cv.ok;
+  cl.ready = CFG.backend === 'api' ? !!CFG.apiKey : (cv.ok && cl.state !== 'err' && !!AG.lastOk);
   items.push(cl);
 
   items.push(mt5Item());
@@ -1880,6 +1883,7 @@ const STATIC = {
   '/watch.js': ['public/watch.js', 'text/javascript; charset=utf-8'],
   '/library.js': ['public/library.js', 'text/javascript; charset=utf-8'],
   '/settings.js': ['public/settings.js', 'text/javascript; charset=utf-8'],
+  '/onboard.js': ['public/onboard.js', 'text/javascript; charset=utf-8'],
   '/validate.js': ['public/validate.js', 'text/javascript; charset=utf-8'],
   '/watchlist.js': ['public/watchlist.js', 'text/javascript; charset=utf-8'],
   '/profile-core.js': ['public/profile-core.js', 'text/javascript; charset=utf-8'],

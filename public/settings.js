@@ -33,7 +33,7 @@
       <button class="st-btn" id="stRecheck">↻ Проверить всё</button><button class="lib-x" id="stClose" title="Закрыть (Esc)">✕</button></div>
     <div class="st-body" id="stBody"><div class="st-wait">Проверяю подключения…</div></div>
     <div class="st-foot"><span class="muted st-fn" id="stFootNote">Не работает? Сообщите о проблеме — диагностика подставится сама (без путей, логинов и токенов).</span>
-      <button class="st-btn pri" id="stIssue" title="Откроется GitHub: проверьте текст и нажмите «Submit new issue»">⚑ Сообщить о проблеме</button><button class="st-btn" id="stCopy">⧉ Скопировать диагностику</button><button class="st-btn" id="stSave">⤓ Сохранить .txt</button></div>
+      <button class="st-btn" id="stTour" title="Что умеет программа и где что находится">? Тур по программе</button><button class="st-btn pri" id="stIssue" title="Откроется GitHub: проверьте текст и нажмите «Submit new issue»">⚑ Сообщить о проблеме</button><button class="st-btn" id="stCopy">⧉ Скопировать диагностику</button><button class="st-btn" id="stSave">⤓ Сохранить .txt</button></div>
   </div>`;
   document.body.appendChild(modal);
   modal.addEventListener('mousedown', e => { if (e.target === modal) close(); });
@@ -43,6 +43,7 @@
   $('stCopy').onclick = () => copyDiag();
   $('stSave').onclick = () => saveDiag();
   $('stIssue').onclick = () => reportIssue();
+  $('stTour').onclick = () => { close(); window.QLOnboard && window.QLOnboard.open(0); };
 
   function open() { modal.classList.remove('hidden'); render(); refresh(true); if (D) D.info().then(i => { ST.desk = i; render(); }).catch(() => {}); }
   function close() { modal.classList.add('hidden'); }
