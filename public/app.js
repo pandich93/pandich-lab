@@ -32,7 +32,7 @@ const S = {
 store.set('ql.session', S.sessionId);
 let uid = Date.now();
 const newId = () => 's' + (uid++).toString(36);
-const saveScripts = () => store.set(K('ql.scripts'), S.scripts.map(({ id, name, code, inputs, visible }) => ({ id, name, code, inputs, visible })));
+const saveScripts = () => store.set(K('ql.scripts'), S.scripts.map(({ id, name, code, inputs, style, visible }) => ({ id, name, code, inputs, style, visible })));
 
 // ───────── chart ─────────
 const chartEl = $('chart');
@@ -298,6 +298,18 @@ function clearIndicators() {
   for (let i = chart.panes().length - 1; i >= 1; i--) if (!chart.panes()[i].getSeries().length) chart.removePane(i);
 }
 
+// per-plot overrides from the «Стиль» tab: { [plot key]: { hide, color, width } }
+const plotKey = (sp, i) => sp.title || '#' + i;
+function styledPlot(s, sp, i) {
+  const o = s.style && s.style[plotKey(sp, i)];
+  if (!o) return sp;
+  if (o.hide) return null;
+  const r = { ...sp };
+  if (o.width) r.linewidth = o.width;
+  if (o.color) { r.color = o.color; r.data = sp.data.map(d => (d.c && !isClear(d.c) ? { t: d.t, v: d.v, c: o.color } : d)); }
+  return r;
+}
+
 function renderAll() {
   clearIndicators();
   applyCandles();
@@ -308,7 +320,7 @@ function renderAll() {
     if (!s.visible || !s.result) continue;
     const R = s.result;
     const subPane = R.series.some(x => x.pane !== 0) || (!R.overlay && R.hlines.length) ? nextPane++ : null;
-    for (const sp of R.series) s._series[sp.title] = { api: seriesFor(sp, sp.pane === 0 ? 0 : subPane), pane: sp.pane === 0 ? 0 : subPane };
+    R.series.forEach((sp0, i) => { const sp = styledPlot(s, sp0, i); if (sp) s._series[sp.title] = { api: seriesFor(sp, sp.pane === 0 ? 0 : subPane), pane: sp.pane === 0 ? 0 : subPane }; });
     for (const h of R.hlines) {
       let host = R.overlay ? candles : (Object.values(s._series).find(x => x.pane === subPane) || {}).api;
       if (!host && subPane !== null) host = seriesFor({ title: '', style: 'style_line', color: 'rgba(0,0,0,0)', data: S.bars.map(b => ({ t: b.time, v: null })) }, subPane);
@@ -532,23 +544,36 @@ function selectScript(id) {
 }
 
 // ───────── inputs dialog ─────────
-// ───────── indicator settings (TradingView-style): groups, inline rows, tooltips, colour + opacity, live preview ─────────
+// ───────── indicator settings (TradingView-style): inputs + style tabs, groups, inline rows, tooltips, colour + opacity, live preview ─────────
 const SWATCHES = ['#F23645', '#FF9800', '#FFEB3B', '#4CAF50', '#089981', '#00BCD4', '#2962FF', '#673AB7', '#9C27B0', '#E91E63', '#FFFFFF', '#B2B5BE', '#787B86', '#434651', '#131722'];
-const colHex = v => { const m = String(v || '').trim().match(/^#?([0-9a-f]{6})([0-9a-f]{2})?$/i); return m ? { rgb: '#' + m[1].toUpperCase(), a: m[2] ? parseInt(m[2], 16) : 255 } : { rgb: '#2962FF', a: 255 }; };
+const colHex = v => {
+  const t = String(v || '').trim(), m = t.match(/^#?([0-9a-f]{6})([0-9a-f]{2})?$/i);
+  if (m) return { rgb: '#' + m[1].toUpperCase(), a: m[2] ? parseInt(m[2], 16) : 255 };
+  const r = t.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)$/i);
+  if (r) return { rgb: '#' + [r[1], r[2], r[3]].map(x => Math.min(255, +x).toString(16).padStart(2, '0')).join('').toUpperCase(), a: r[4] === undefined ? 255 : Math.round(Math.min(1, +r[4]) * 255) };
+  return { rgb: '#2962FF', a: 255 };
+};
 const colStr = (rgb, a) => (rgb.toUpperCase() + (a >= 255 ? 'FF' : Math.max(0, Math.round(a)).toString(16).padStart(2, '0').toUpperCase()));
-const sameVal = (m, a, b) => m.type === 'color' ? colStr(colHex(a).rgb, colHex(a).a) === colStr(colHex(b).rgb, colHex(b).a) : String(a) === String(b);
+const colNorm = v => { const h = colHex(v); return colStr(h.rgb, h.a); };
+const sameVal = (m, a, b) => m.type === 'color' ? colNorm(a) === colNorm(b) : String(a) === String(b);
+const swatch = (attrs, v) => { const h = colHex(v); return `<button class="ind-sw" ${attrs} title="${esc(colStr(h.rgb, h.a))}"><i style="background:${h.rgb};opacity:${(h.a / 255).toFixed(2)}"></i></button>`; };
+const paintSwatch = (sw, v) => { const h = colHex(v), i = sw.querySelector('i'); i.style.background = h.rgb; i.style.opacity = (h.a / 255).toFixed(2); sw.title = colStr(h.rgb, h.a); };
 let indDlg = null;
-function openInputs(s) {
+function openInputs(s, tab) {
   const meta = (s.result && s.result.inputsMeta) || [];
+  const plots = (s.result && s.result.series) || [];
   if (indDlg) indDlg.close(false);
-  const before = JSON.parse(JSON.stringify(s.inputs || {}));
+  const before = JSON.parse(JSON.stringify(s.inputs || {})), beforeStyle = JSON.parse(JSON.stringify(s.style || {}));
   // key = Pine variable name (unique even when titles repeat or are empty); old saves keyed by title still load
   const keyOf = m => m.varId || m.id || m.title || m.name, si = s.inputs || {};
   const val = {}; meta.forEach((m, k) => { const a = keyOf(m), b = m.title || m.name; val[k] = a in si ? si[a] : (b && b in si) ? si[b] : m.defval; });
+  const sty = JSON.parse(JSON.stringify(s.style || {}));
+  const pdef = (sp, i) => ({ hide: false, color: colNorm(isClear(sp.color) ? (sp.data.find(d => d.c && !isClear(d.c)) || {}).c || sp.color : sp.color), width: Math.min(4, sp.linewidth || 1) });
+  const pcur = (sp, i) => ({ ...pdef(sp, i), ...(sty[plotKey(sp, i)] || {}) });
   const ov = document.createElement('div'); ov.className = 'ind-ov';
   const dlg = document.createElement('div'); dlg.className = 'ind-dlg'; ov.appendChild(dlg); document.body.appendChild(ov);
 
-  // rows: group headers, then inline groups share one row
+  // ── inputs tab: group headers, inline groups share one row
   const rows = []; let lastGroup = null;
   meta.forEach((m, k) => {
     const g = m.group || '';
@@ -564,24 +589,45 @@ function openInputs(s) {
     let c;
     if (m.options && m.options.length) c = `<select data-noi18n data-k="${k}">${m.options.map(o => `<option ${String(o) === String(v) ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
     else if (m.type === 'int' || m.type === 'float' || m.type === 'price') c = `<input class="ind-num" type="text" inputmode="decimal" data-k="${k}" value="${esc(v)}">`;
-    else if (m.type === 'color') { const h = colHex(v); c = `<button class="ind-sw" data-k="${k}" title="${esc(colStr(h.rgb, h.a))}"><i style="background:${h.rgb};opacity:${(h.a / 255).toFixed(2)}"></i></button>`; }
+    else if (m.type === 'color') c = swatch(`data-k="${k}"`, v);
     else if (m.type === 'text_area') c = `<textarea data-k="${k}" rows="3">${esc(v ?? '')}</textarea>`;
     else c = `<input type="text" data-k="${k}" value="${esc(v ?? '')}">`;
     return `<span class="ind-lbl"><span data-noi18n>${label}</span>${tip(m)}</span>${c}`;
   };
-  const body = !meta.length ? '<div class="ind-empty">У скрипта нет input.* параметров.</div>' : rows.map(r => r.group !== undefined && !r.items
+  const inputsBody = !meta.length ? '<div class="ind-empty">У скрипта нет input.* параметров.</div>' : rows.map(r => r.group !== undefined && !r.items
     ? `<div class="ind-grp" data-noi18n>${esc(r.group)}</div>`
     : `<div class="ind-row${r.items.length > 1 ? ' inl' : ''}">${r.items.map(k => `<div class="ind-cell${meta[k].type === 'bool' ? ' b' : ''}">${ctl(k)}</div>`).join('')}</div>`).join('');
+  // ── style tab: one row per plot — visible, colour, width
+  const styleBody = !plots.length ? '<div class="ind-empty">У скрипта нет линий plot().</div>' : plots.map((sp, i) => {
+    const c = pcur(sp, i);
+    return `<div class="ind-row" data-p="${i}"><label class="ind-bool"><input type="checkbox" data-pv="${i}" ${c.hide ? '' : 'checked'}><span data-noi18n>${esc(sp.title || 'Plot ' + (i + 1))}</span></label><span class="sp"></span>
+      ${swatch(`data-pc="${i}"`, c.color)}<select class="ind-w" data-pw="${i}" title="Толщина">${[1, 2, 3, 4].map(w => `<option value="${w}" ${w === c.width ? 'selected' : ''}>${w}px</option>`).join('')}</select></div>`;
+  }).join('');
+  tab = tab === 'style' && plots.length ? 'style' : 'inputs';
   dlg.innerHTML = `<div class="ind-h"><b data-noi18n title="${esc(s.name)}">${esc(s.name)}</b><button class="ind-x" title="Закрыть (Esc)">✕</button></div>
-    <div class="ind-tabs"><span class="on">Входные данные</span></div>
-    <div class="ind-b">${body}</div>
-    <div class="ind-f">${meta.length ? '<button class="ind-btn" data-a="reset">По умолчанию</button>' : ''}<span class="sp"></span><button class="ind-btn" data-a="cancel">Отмена</button><button class="ind-btn pri" data-a="ok">ОК</button></div>`;
+    <div class="ind-tabs"><span data-t="inputs">Входные данные</span><span data-t="style">Стиль</span></div>
+    <div class="ind-b" data-tb="inputs">${inputsBody}</div><div class="ind-b" data-tb="style">${styleBody}</div>
+    <div class="ind-f"><button class="ind-btn" data-a="reset">По умолчанию</button><span class="sp"></span><button class="ind-btn" data-a="cancel">Отмена</button><button class="ind-btn pri" data-a="ok">ОК</button></div>`;
+  const showTab = t => { tab = t; dlg.querySelectorAll('[data-t]').forEach(x => x.classList.toggle('on', x.dataset.t === t)); dlg.querySelectorAll('[data-tb]').forEach(x => { x.hidden = x.dataset.tb !== t; }); };
+  dlg.querySelectorAll('[data-t]').forEach(x => { x.onclick = () => { closePop(); showTab(x.dataset.t); }; });
+  showTab(tab);
 
-  // live preview: re-run the script shortly after each change
+  // ── live preview: inputs re-run the script (debounced), style only re-renders
   let tmr = null, dirty = false, chain = Promise.resolve();
   const rerun = () => (chain = chain.then(async () => { await runScript(s); renderAll(); }).catch(e => console.error(e)));
   const collect = () => { const o = {}; meta.forEach((m, k) => { if (!sameVal(m, val[k], m.defval)) o[keyOf(m)] = val[k]; }); return o; };
   const preview = () => { dirty = true; clearTimeout(tmr); tmr = setTimeout(() => { s.inputs = collect(); rerun(); }, 350); };
+  const collectStyle = () => {
+    const o = {};
+    plots.forEach((sp, i) => {
+      const key = plotKey(sp, i), d = pdef(sp, i), c = sty[key]; if (!c) return;
+      const x = {}; if (c.hide) x.hide = true; if (c.color && colNorm(c.color) !== d.color) x.color = c.color; if (c.width && c.width !== d.width) x.width = c.width;
+      if (Object.keys(x).length) o[key] = x;
+    });
+    return o;
+  };
+  const restyle = () => { s.style = collectStyle(); renderAll(); };
+  const setStyle = (i, patch) => { const key = plotKey(plots[i], i); sty[key] = { ...(sty[key] || {}), ...patch }; restyle(); };
   const setNum = (el, k, v) => {
     const m = meta[k]; if (!Number.isFinite(v)) { el.classList.add('bad'); return; }
     if (m.minval !== undefined) v = Math.max(m.minval, v); if (m.maxval !== undefined) v = Math.min(m.maxval, v);
@@ -590,10 +636,10 @@ function openInputs(s) {
   };
   dlg.querySelectorAll('[data-k]').forEach(el => {
     const k = +el.dataset.k, m = meta[k];
-    if (el.classList.contains('ind-sw')) { el.onclick = e => { e.stopPropagation(); colorPop(el, k); }; return; }
+    if (el.classList.contains('ind-sw')) { el.onclick = e => { e.stopPropagation(); colorPop(el, 'k' + k, () => val[k], v => { val[k] = v; preview(); }); }; return; }
     if (el.type === 'checkbox') { el.onchange = () => { val[k] = el.checked; preview(); }; return; }
     if (el.classList.contains('ind-num')) {
-      el.oninput = () => { const v = parseFloat(el.value.replace(',', '.')); if (el.value.trim() === '' || el.value.trim() === '-') return; setNum(el, k, v); };
+      el.oninput = () => { const t = el.value.trim(); if (t === '' || t === '-') return; setNum(el, k, parseFloat(t.replace(',', '.'))); };
       el.onblur = () => { el.value = String(val[k]); el.classList.remove('bad'); };
       el.onkeydown = e => {
         if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
@@ -606,34 +652,39 @@ function openInputs(s) {
     }
     el.oninput = el.onchange = () => { val[k] = el.value; preview(); };
   });
+  dlg.querySelectorAll('[data-pv]').forEach(el => { el.onchange = () => { setStyle(+el.dataset.pv, { hide: !el.checked }); el.closest('.ind-row').classList.toggle('off', !el.checked); }; el.closest('.ind-row').classList.toggle('off', !el.checked); });
+  dlg.querySelectorAll('[data-pw]').forEach(el => { el.onchange = () => setStyle(+el.dataset.pw, { width: +el.value }); });
+  dlg.querySelectorAll('[data-pc]').forEach(el => { const i = +el.dataset.pc; el.onclick = e => { e.stopPropagation(); colorPop(el, 'p' + i, () => pcur(plots[i], i).color, v => setStyle(i, { color: v })); }; });
 
-  // colour popover: palette, custom colour, opacity
+  // ── colour popover: palette, custom colour, opacity
   let pop = null;
-  function colorPop(sw, k) {
-    if (pop) { const same = pop.k === k; pop.el.remove(); pop = null; if (same) return; }
-    const h = colHex(val[k]), el = document.createElement('div'); el.className = 'ind-cp';
+  const closePop = () => { if (pop) { pop.el.remove(); pop = null; } };
+  function colorPop(sw, id, get, set) {
+    if (pop) { const same = pop.id === id; closePop(); if (same) return; }
+    const h = colHex(get()), el = document.createElement('div'); el.className = 'ind-cp';
     el.innerHTML = `<div class="ind-pal">${SWATCHES.map(c => `<button data-c="${c}" style="background:${c}" class="${c === h.rgb ? 'on' : ''}"></button>`).join('')}</div>
       <div class="ind-cprow"><input type="color" value="${h.rgb.toLowerCase()}"><input class="ind-hex" type="text" value="${h.rgb}" spellcheck="false"></div>
       <div class="ind-cprow"><span class="muted">Непрозрачность</span><input type="range" min="0" max="100" value="${Math.round(h.a / 2.55)}"><b>${Math.round(h.a / 2.55)}%</b></div>`;
-    dlg.appendChild(el); pop = { el, k };
+    dlg.appendChild(el); pop = { el, id };
     const r = sw.getBoundingClientRect(), dr = dlg.getBoundingClientRect();
-    el.style.top = Math.min(r.bottom - dr.top + 6, dr.height - el.offsetHeight - 8) + 'px';
+    el.style.top = Math.max(8, Math.min(r.bottom - dr.top + 6, dr.height - el.offsetHeight - 8)) + 'px';
     el.style.left = Math.max(8, Math.min(r.right - dr.left - el.offsetWidth, dr.width - el.offsetWidth - 8)) + 'px';
     const apply = (rgb, a) => {
-      val[k] = colStr(rgb, a); const i = sw.querySelector('i'); i.style.background = rgb; i.style.opacity = (a / 255).toFixed(2); sw.title = val[k];
+      const v = colStr(rgb, a); set(v); paintSwatch(sw, v);
       el.querySelector('input[type=color]').value = rgb.toLowerCase(); el.querySelector('.ind-hex').value = rgb;
-      el.querySelectorAll('[data-c]').forEach(b => b.classList.toggle('on', b.dataset.c === rgb)); preview();
+      el.querySelectorAll('[data-c]').forEach(b => b.classList.toggle('on', b.dataset.c === rgb));
     };
-    const cur = () => colHex(val[k]);
+    const cur = () => colHex(get());
     el.querySelectorAll('[data-c]').forEach(b => { b.onclick = () => apply(b.dataset.c, cur().a); });
     el.querySelector('input[type=color]').oninput = e => apply(e.target.value.toUpperCase(), cur().a);
     el.querySelector('.ind-hex').onchange = e => { const c = colHex(e.target.value); apply(c.rgb, cur().a); };
     el.querySelector('input[type=range]').oninput = e => { el.querySelector('b').textContent = e.target.value + '%'; apply(cur().rgb, e.target.value * 2.55); };
     el.onclick = e => e.stopPropagation();
   }
-  dlg.addEventListener('click', () => { if (pop) { pop.el.remove(); pop = null; } });
+  dlg.addEventListener('click', closePop);
+  dlg.querySelectorAll('.ind-b').forEach(b => b.addEventListener('scroll', closePop));
 
-  // drag by the header
+  // ── drag by the header
   const hd = dlg.querySelector('.ind-h');
   hd.onpointerdown = e => {
     if (e.target.closest('button')) return;
@@ -645,28 +696,36 @@ function openInputs(s) {
 
   const close = async apply => {
     clearTimeout(tmr); document.removeEventListener('keydown', onKey, true); ov.remove(); indDlg = null;
-    if (apply) { s.inputs = collect(); saveScripts(); if (dirty) await rerun(); }
-    else if (dirty) { s.inputs = before; await rerun(); }
+    if (apply) { s.inputs = collect(); s.style = collectStyle(); saveScripts(); if (dirty) await rerun(); else renderAll(); }
+    else { s.style = beforeStyle; if (dirty) { s.inputs = before; await rerun(); } else renderAll(); }
   };
   const onKey = e => {
-    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (pop) { pop.el.remove(); pop = null; } else close(false); }
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (pop) closePop(); else close(false); }
     else if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); close(true); }
   };
   document.addEventListener('keydown', onKey, true);
   dlg.querySelector('.ind-x').onclick = () => close(false);
   dlg.querySelector('[data-a="cancel"]').onclick = () => close(false);
   dlg.querySelector('[data-a="ok"]').onclick = () => close(true);
-  const rs = dlg.querySelector('[data-a="reset"]');
-  if (rs) rs.onclick = () => {
-    if (pop) { pop.el.remove(); pop = null; }
+  // «По умолчанию»: resets both tabs in place, the window stays open
+  dlg.querySelector('[data-a="reset"]').onclick = () => {
+    closePop();
+    const hadInputs = meta.some((m, k) => !sameVal(m, val[k], m.defval));
     meta.forEach((m, k) => { val[k] = m.defval; });
     dlg.querySelectorAll('[data-k]').forEach(el => {
-      const k = +el.dataset.k, v = val[k];
-      if (el.classList.contains('ind-sw')) { const h = colHex(v), i = el.querySelector('i'); i.style.background = h.rgb; i.style.opacity = (h.a / 255).toFixed(2); el.title = colStr(h.rgb, h.a); }
+      const v = val[+el.dataset.k];
+      if (el.classList.contains('ind-sw')) paintSwatch(el, v);
       else if (el.type === 'checkbox') el.checked = !!v;
       else { el.value = v ?? ''; el.classList.remove('bad'); }
     });
-    preview();
+    Object.keys(sty).forEach(k => delete sty[k]);
+    plots.forEach((sp, i) => {
+      const d = pdef(sp, i);
+      const cb = dlg.querySelector(`[data-pv="${i}"]`); cb.checked = true; cb.closest('.ind-row').classList.remove('off');
+      paintSwatch(dlg.querySelector(`[data-pc="${i}"]`), d.color); dlg.querySelector(`[data-pw="${i}"]`).value = String(d.width);
+    });
+    restyle();
+    if (hadInputs || Object.keys(before).length) preview();
   };
   ov.addEventListener('mousedown', e => { if (e.target === ov) close(true); });
   indDlg = { close };

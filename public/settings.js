@@ -32,8 +32,8 @@
     <div class="st-top"><b>Настройки и подключения</b><div class="spacer"></div>
       <button class="st-btn" id="stRecheck">↻ Проверить всё</button><button class="lib-x" id="stClose" title="Закрыть (Esc)">✕</button></div>
     <div class="st-body" id="stBody"><div class="st-wait">Проверяю подключения…</div></div>
-    <div class="st-foot"><span class="muted st-fn" id="stFootNote">Не работает? Скопируйте диагностику и отправьте разработчику.</span>
-      <button class="st-btn" id="stCopy">⧉ Скопировать диагностику</button><button class="st-btn" id="stSave">⤓ Сохранить .txt</button></div>
+    <div class="st-foot"><span class="muted st-fn" id="stFootNote">Не работает? Сообщите о проблеме — диагностика подставится сама (без путей, логинов и токенов).</span>
+      <button class="st-btn pri" id="stIssue" title="Откроется GitHub: проверьте текст и нажмите «Submit new issue»">⚑ Сообщить о проблеме</button><button class="st-btn" id="stCopy">⧉ Скопировать диагностику</button><button class="st-btn" id="stSave">⤓ Сохранить .txt</button></div>
   </div>`;
   document.body.appendChild(modal);
   modal.addEventListener('mousedown', e => { if (e.target === modal) close(); });
@@ -42,6 +42,7 @@
   $('stRecheck').onclick = () => refresh(true);
   $('stCopy').onclick = () => copyDiag();
   $('stSave').onclick = () => saveDiag();
+  $('stIssue').onclick = () => reportIssue();
 
   function open() { modal.classList.remove('hidden'); render(); refresh(true); if (D) D.info().then(i => { ST.desk = i; render(); }).catch(() => {}); }
   function close() { modal.classList.add('hidden'); }
@@ -156,7 +157,7 @@
   }
 
   function updText(u) {
-    return { off: `выключены — ${u.reason}`, idle: 'проверка через несколько секунд после запуска, затем каждые 4 часа', checking: 'проверяю…', none: `последняя версия${u.checkedAt ? ' · проверено ' + new Date(u.checkedAt).toLocaleTimeString() : ''}`,
+    return { off: `выключены — ${u.reason}`, idle: 'проверка при открытии приложения и каждый час', checking: 'проверяю…', none: `последняя версия${u.checkedAt ? ' · проверено ' + new Date(u.checkedAt).toLocaleTimeString() : ''}`,
       downloading: `скачиваю ${u.version}… ${u.percent}%`, ready: `версия ${u.version} скачана и готова к установке`, manual: `доступна ${u.version} — обновите вручную`, error: `ошибка проверки: ${u.error}` }[u.state] || u.state;
   }
   // desktop: live update state from the main process → Settings + a pill in the top bar when ready
@@ -232,6 +233,28 @@
       const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `pandich-lab-diagnostics-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.txt` });
       document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
     } catch (e) { $('stFootNote').textContent = 'Не удалось сохранить: ' + e.message; }
+  }
+
+  // ── "Report a problem": opens a prefilled GitHub issue (the user reviews and submits it; nothing is sent by us).
+  // The status part of the diagnostics goes into the issue text; the full report (with log) is copied to the clipboard.
+  const ISSUES = 'https://github.com/pandich93/pandich-lab/issues/new';
+  async function reportIssue() {
+    const b = $('stIssue'), t = s => (window.QLI18n ? window.QLI18n.t(s) : s);
+    b.disabled = true;
+    try {
+      const full = await diagText().catch(e => 'diagnostics error: ' + e.message);
+      const copied = await copyText(full);
+      const short = full.split('\n\n── ')[0] + (full.includes('── Статус ──') ? '\n\n── ' + full.split('\n\n── ').find(x => x.startsWith('Статус')) : '');
+      const head = `### ${t('Что случилось')}\n\n\n### ${t('Что делали перед этим (шаги)')}\n1. \n\n### ${t('Что ожидали увидеть')}\n\n\n### ${t('Диагностика')}\n`;
+      const tail = copied ? `\n\n_${t('Полная диагностика с логом скопирована в буфер обмена — при необходимости вставьте её ниже.')}_` : '';
+      // a public issue gets no install folders: drop the app path, hide any remaining absolute path
+      const pub = short.replace(/ · home [^\n]*/, '').replace(/\b[A-Za-z]:[\\/][^\n·,;)]*?(?=\s·|$|[,;)])/gm, '<path>').replace(/(^|[\s(])\/(?:Users|home|Volumes|opt|mnt)\/[^\s·,;)]*/g, '$1<path>');
+      let lines = pub.split('\n'), body;
+      do { body = head + '```\n' + lines.join('\n') + '\n```' + tail; lines = lines.slice(0, Math.floor(lines.length * 0.8)); }
+      while (encodeURIComponent(body).length > 6500 && lines.length > 3);
+      window.open(`${ISSUES}?body=${encodeURIComponent(body)}`, '_blank', 'noopener');
+      $('stFootNote').textContent = t('Открылась страница GitHub: опишите проблему и нажмите «Submit new issue». Нужен аккаунт GitHub.');
+    } finally { setTimeout(() => { b.disabled = false; }, 1500); }
   }
 
   // background status for the gear dot: soon after start, then every 3 min

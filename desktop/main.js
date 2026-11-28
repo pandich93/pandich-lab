@@ -157,6 +157,7 @@ function createMain() {
   });
   S.win.loadURL(`http://127.0.0.1:${S.port}/?lang=${curLang()}`);
   S.win.once('ready-to-show', () => { if (!process.argv.includes('--hidden')) S.win.show(); });
+  S.win.on('focus', () => autoCheck(UPDATE_ON_OPEN_GAP)); // opening the app (tray/dock/taskbar) also looks for a new release
   S.win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url) && !url.startsWith(`http://127.0.0.1:${S.port}`)) shell.openExternal(url); return { action: 'deny' }; });
   S.win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith(`http://127.0.0.1:${S.port}`)) { e.preventDefault(); shell.openExternal(url); } });
   // microphone is not used (voice input = OS dictation); allow notifications only
@@ -231,7 +232,8 @@ function setAutostart(on) {
 // macOS: Squirrel.Mac needs an Apple Developer ID signature, so we update ourselves: download the new .dmg from the
 // release, copy the app out of it and swap the bundle after quit (a file fetched by the app gets no quarantine flag).
 const REPO = 'pandich93/pandich-lab';
-const UPDATE_EVERY = 4 * 3600 * 1000;
+const UPDATE_EVERY = 3600 * 1000;        // background check every hour…
+const UPDATE_ON_OPEN_GAP = 10 * 60 * 1000; // …and when the window is opened/focused, at most once per 10 min
 const U = { state: 'idle', version: '', percent: 0, error: '', checkedAt: 0, reason: '', mac: null, installing: false };
 let winUpdater = null;
 const newer = (a, b) => { const x = String(a).replace(/^v/, '').split('.').map(Number), y = String(b).replace(/^v/, '').split('.').map(Number); for (let k = 0; k < 3; k++) { if ((x[k] || 0) !== (y[k] || 0)) return (x[k] || 0) > (y[k] || 0); } return false; };
@@ -262,8 +264,15 @@ function initUpdater() {
     autoUpdater.on('update-downloaded', i => { setU({ state: 'ready', version: i.version, percent: 100 }); readyNote(); });
     autoUpdater.on('error', e => { log(`update: ${e && e.message}`); setU({ state: 'error', error: String(e && e.message || e).slice(0, 200), checkedAt: Date.now() }); });
   }
-  setTimeout(() => checkUpdates(false), 15000);
-  setInterval(() => { if (!['downloading', 'ready'].includes(U.state)) checkUpdates(false); }, UPDATE_EVERY);
+  setTimeout(() => autoCheck(UPDATE_ON_OPEN_GAP), 15000);
+  setInterval(() => autoCheck(0), UPDATE_EVERY);
+}
+let lastAuto = 0;
+function autoCheck(gap) {
+  if (['off', 'checking', 'downloading', 'ready'].includes(U.state) || U.installing) return;
+  if (gap && Date.now() - lastAuto < gap) return;
+  lastAuto = Date.now();
+  checkUpdates(false).catch(e => log(`update: ${e.message}`));
 }
 function readyNote() {
   if (!Notification.isSupported()) return;

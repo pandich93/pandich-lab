@@ -516,7 +516,7 @@ window.QL_I18N_DICT = {
   "Скачать {0} ↗": ["Download {0} ↗", "{0} ni yuklab olish ↗"],
   "Приложение": ["App", "Ilova"],
   "выключены — {0}": ["off — {0}", "o'chirilgan — {0}"],
-  "проверка через несколько секунд после запуска, затем каждые 4 часа": ["checked a few seconds after start, then every 4 hours", "ishga tushgandan bir necha soniyadan keyin, so'ng har 4 soatda tekshiriladi"],
+  "проверка при открытии приложения и каждый час": ["checked when the app is opened and every hour", "ilova ochilganda va har soatda tekshiriladi"],
   "проверяю…": ["checking…", "tekshirilmoqda…"],
   "последняя версия{0}": ["latest version{0}", "so'nggi versiya{0}"],
   "последняя версия": ["latest version", "so'nggi versiya"],
@@ -815,5 +815,16 @@ window.QL_I18N_DICT = {
   "Символа «{0}» у брокера {1} нет.": ["Symbol \"{0}\" is not available at broker {1}.", "«{0}» belgisi {1} brokerida yo'q."],
   // ── indicator settings dialog
   "Входные данные": ["Inputs", "Kiritmalar"],
-  "Непрозрачность": ["Opacity", "Shaffoflik"]
+  "Непрозрачность": ["Opacity", "Shaffoflik"],
+  // ── report a problem
+  "Не работает? Сообщите о проблеме — диагностика подставится сама (без путей, логинов и токенов).": ["Not working? Report a problem — diagnostics are filled in automatically (no paths, logins or tokens).", "Ishlamayaptimi? Muammo haqida xabar bering — diagnostika o'zi qo'shiladi (yo'llar, loginlar va tokenlarsiz)."],
+  "Откроется GitHub: проверьте текст и нажмите «Submit new issue»": ["Opens GitHub: check the text and press \"Submit new issue\"", "GitHub ochiladi: matnni tekshiring va «Submit new issue» tugmasini bosing"],
+  "⚑ Сообщить о проблеме": ["⚑ Report a problem", "⚑ Muammo haqida xabar berish"],
+  "Что случилось": ["What happened", "Nima bo'ldi"],
+  "Что делали перед этим (шаги)": ["What you did before (steps)", "Bundan oldin nima qildingiz (qadamlar)"],
+  "Что ожидали увидеть": ["What you expected", "Nimani kutgandingiz"],
+  "Диагностика": ["Diagnostics", "Diagnostika"],
+  "Полная диагностика с логом скопирована в буфер обмена — при необходимости вставьте её ниже.": ["The full diagnostics with the log are copied to the clipboard — paste them below if needed.", "Log bilan to'liq diagnostika buferga nusxalandi — kerak bo'lsa, quyiga joylang."],
+  "Открылась страница GitHub: опишите проблему и нажмите «Submit new issue». Нужен аккаунт GitHub.": ["A GitHub page has opened: describe the problem and press \"Submit new issue\". A GitHub account is required.", "GitHub sahifasi ochildi: muammoni yozing va «Submit new issue» tugmasini bosing. GitHub akkaunti kerak."],
+  "У скрипта нет линий plot().": ["The script has no plot() lines.", "Skriptda plot() chiziqlari yo'q."]
 };
