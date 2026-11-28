@@ -1116,7 +1116,10 @@ async function agentTurnClaudeCode(body, emit) {
     '--model', model,
     '--append-system-prompt-file', 'system.md',
     '--permission-mode', 'dontAsk',
-    '--allowedTools', process.platform === 'win32' ? 'Read,Write,Edit,Bash(node ql.mjs *),PowerShell(node ql.mjs *)' : 'Read,Write,Edit,Bash(node ql.mjs *)',
+    // both rule spellings (new "cmd *" and legacy "cmd:*"); PowerShell = Windows without Git Bash
+    '--allowedTools', ['Read', 'Write', 'Edit', 'Bash(node ql.mjs *)', 'Bash(node ql.mjs:*)', ...(process.platform === 'win32' ? ['PowerShell(node ql.mjs *)', 'PowerShell(node ql.mjs:*)'] : [])].join(','),
+    // only Pandich Lab's own settings: the user's ~/.claude (personal hooks, deny rules, plugins, CLAUDE.md) must not change Panda's behaviour
+    '--setting-sources', 'project,local',
   ];
   if (st.ccSession) args.push('--resume', st.ccSession);
 
@@ -1148,11 +1151,17 @@ async function agentTurnClaudeCode(body, emit) {
             if (b.type === 'text' && b.text && b.text.trim()) emit({ type: 'text', text: b.text });
             if (b.type === 'tool_use') {
               const cmd = b.input && (b.input.command || b.input.file_path) || '';
+              console.log(`Panda tool: ${b.name} ${String(cmd).slice(0, 200)}`);
               emit({ type: 'status', text: b.name === 'Bash' ? (String(cmd).includes(' run ') ? 'Запускаю код на графике…' : `> ${cmd}`) : `${b.name} ${path.basename(String(cmd))}` });
             }
           }
         }
-        if (ev.type === 'result') finalResult = ev;
+        if (ev.type === 'result') {
+          finalResult = ev;
+          // a refused tool call is the most common "Panda can't run code" cause — keep it in the log for diagnostics
+          for (const d of (ev.permission_denials || []).slice(0, 5)) console.log(`Panda: permission denied → ${d.tool_name} ${JSON.stringify(d.tool_input || {}).slice(0, 200)}`);
+          if ((ev.permission_denials || []).length) AG.lastDenied = { at: Date.now(), tool: ev.permission_denials[0].tool_name, input: JSON.stringify(ev.permission_denials[0].tool_input || {}).slice(0, 200) };
+        }
       }
     });
     child.stderr.on('data', c => { errBuf += c.toString('utf8'); });
@@ -1476,6 +1485,7 @@ async function health({ force = false } = {}) {
     else if (AG.lastOk) Object.assign(cl, { state: 'ok', summary: `Работает · последний ответ ${ago(AG.lastOk)}` });
     else Object.assign(cl, { state: 'idle', summary: 'Установлен, вход не проверен', hint: 'Нажмите «Проверить Panda» — будет отправлен один короткий запрос через вашу подписку.' });
     if (test) cl.details.push(['Проверка', `${test.ok ? 'успешно' : 'ошибка'} · ${ago(test.t)}${test.ok ? ` · ${(test.ms / 1000).toFixed(1)} с` : ''}`]);
+    if (AG.lastDenied && Date.now() - AG.lastDenied.at < 6 * 3600e3) { cl.details.push(['Заблокированная команда', `${AG.lastDenied.tool} ${maskPII(AG.lastDenied.input)} (${ago(AG.lastDenied.at)})`]); if (cl.state === 'ok') Object.assign(cl, { state: 'warn', summary: 'Работает, но Panda не дали выполнить команду', hint: 'Скопируйте диагностику и отправьте разработчику — по ней видно, какая команда заблокирована.' }); }
     cl.actions.push('claude.test'); if (au.mode !== 'apikey') cl.actions.push('claude.login');
     if (au.mode === 'apikey' && !key) Object.assign(cl, { state: 'err', summary: 'Выбран вход по API-ключу, но ключ не задан', hint: 'Вставьте ключ из Claude Console (platform.claude.com → API keys) и нажмите «Сохранить», или выберите «Подписка Claude».' });
     else if (au.mode === 'apikey' && cl.state === 'err' && /вход/i.test(cl.summary)) Object.assign(cl, { summary: 'API-ключ не принят', hint: 'Проверьте, что ключ скопирован целиком, не отозван и на счёте Anthropic есть баланс (Claude Console → Billing).' });

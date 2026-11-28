@@ -947,5 +947,8 @@ window.QL_I18N_DICT = {
   "Без 5 лучших сделок прибыль остаётся": ["Still profitable without the 5 best trades", "5 ta eng yaxshi bitimsiz ham foyda qoladi"],
   "результат держится на нескольких сделках": ["the result rests on a few trades", "natija bir nechta bitimga tayanadi"],
   "Соседи ±1 шаг тоже в плюсе": ["Neighbours ±1 step also profitable", "Qo'shnilar ±1 qadam ham foydada"],
-  "{0}% региона": ["{0}% of region", "hududning {0}%"]
+  "{0}% региона": ["{0}% of region", "hududning {0}%"],
+  "Заблокированная команда": ["Blocked command", "Bloklangan buyruq"],
+  "Работает, но Panda не дали выполнить команду": ["Works, but Panda was not allowed to run a command", "Ishlayapti, lekin Panda'ga buyruqni bajarishga ruxsat berilmadi"],
+  "Скопируйте диагностику и отправьте разработчику — по ней видно, какая команда заблокирована.": ["Copy the diagnostics and send them to the developer — they show which command was blocked.", "Diagnostikani nusxalab, dasturchiga yuboring — unda qaysi buyruq bloklangani ko'rinadi."]
 };
