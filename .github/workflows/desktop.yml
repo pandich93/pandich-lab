@@ -1,13 +1,16 @@
 # Builds the Pandich Lab desktop app for Windows (.exe installer) and macOS (.dmg, universal).
 # Manual run (Actions → Desktop build → Run workflow): installers as downloadable artifacts;
 # tick "Publish a GitHub Release" to publish release v<version> from desktop/package.json.
-# A pushed tag v* publishes too.
+# A pushed tag v* publishes too, and so does a push to main that raises the version in desktop/package.json
+# (no release for that version yet → build + publish; version unchanged → nothing runs). Editing this workflow re-checks too.
 # Release assets: versioned files + latest*.yml + blockmaps (auto-update), and stable-name copies
 # for direct links:  …/releases/latest/download/PandichLab-Setup.exe  and  …/PandichLab-mac.dmg
 name: Desktop build
 on:
   push:
     tags: ['v*']
+    branches: [main]
+    paths: ['desktop/package.json', '.github/workflows/desktop.yml']
   workflow_dispatch:
     inputs:
       release:
@@ -17,7 +20,30 @@ on:
 permissions:
   contents: write
 jobs:
+  # decides whether to build and whether to publish
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.c.outputs.build }}
+      publish: ${{ steps.c.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: c
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WANT_RELEASE: ${{ inputs.release }}
+        run: |
+          VER=$(node -p "require('./desktop/package.json').version")
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF_TYPE" = "branch" ]; then
+            if gh api "repos/$GITHUB_REPOSITORY/releases/tags/v$VER" >/dev/null 2>&1; then B=false; P=false; echo "v$VER already released - nothing to do"; else B=true; P=true; echo "new version v$VER - build and publish"; fi
+          elif [ "$GITHUB_EVENT_NAME" = "push" ]; then B=true; P=true
+          else B=true; P=$([ "$WANT_RELEASE" = "true" ] && echo true || echo false)
+          fi
+          echo "build=$B" >> "$GITHUB_OUTPUT"; echo "publish=$P" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: check
+    if: needs.check.outputs.build == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -50,8 +76,8 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/') || inputs.release
+    needs: [check, build]
+    if: needs.check.outputs.publish == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
