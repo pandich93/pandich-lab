@@ -988,5 +988,9 @@ window.QL_I18N_DICT = {
   "Алерт создан": ["Alert created", "Alert yaratildi"],
   "Алерт на цене {0}": ["Alert at {0}", "{0} narxida alert"],
   "Алерт на этой линии": ["Alert on this line", "Shu chiziqda alert"],
-  "Алерт цены": ["Price alert", "Narx alerti"]
+  "Алерт цены": ["Price alert", "Narx alerti"],
+  "запрошено": ["requested", "so'ralgan"],
+  "больше истории у источника нет": ["the source has no more history", "manbada bundan ko'p tarix yo'q"],
+  "Эту стратегию уже проверяли:": ["This strategy has already been checked:", "Bu strategiya allaqachon tekshirilgan:"],
+  "наборов (на любых символах и таймфреймах). Они войдут в поправку на число испытаний — каждая «подкрутка» делает порог строже.": ["sets (on any symbols and timeframes). They count towards the trials correction — every \"tweak\" makes the bar stricter.", "to'plam (istalgan belgi va taymfreymlarda). Ular sinovlar soniga tuzatishga kiradi — har bir «sozlash» chegarani qattiqroq qiladi."]
 };

@@ -667,7 +667,9 @@ const VJOBS = new Map(); let vjobSeq = 0;
 const loadTrials = () => { try { return JSON.parse(fs.readFileSync(VAL_TRIALS_FILE, 'utf8')); } catch { return {}; } };
 const pineTitle = code => (String(code).match(/^\s*strategy\s*\(\s*(?:title\s*=\s*)?["']([^"']+)["']/m) || [])[1] || '';
 // every grid cell, every rerun after "tweak it" — all count as trials for the deflated Sharpe; keyed by strategy title (survives code edits)
-function trialsKey(code, symbol, interval) { return `${pineTitle(code) || 'Script'}|${symbol}|${interval}`; }
+// the method counts every variant, symbol AND timeframe of one idea → one counter per strategy title (older files keyed "title|SYM|tf" are summed)
+function trialsKey(code) { return pineTitle(code) || 'Script'; }
+function trialsOf(all, title) { let n = 0; for (const [k, v] of Object.entries(all)) if (k === title || k.startsWith(title + '|')) n += (v && v.trials) || 0; return n; }
 const annFor = src => (src === 'binance' ? 365 : 252);
 function medianOf(a) { const b = a.filter(Number.isFinite).sort((x, y) => x - y); return b.length ? b[b.length >> 1] : NaN; }
 async function validationDefaults(symbol, interval, title = '') {
@@ -678,8 +680,8 @@ async function validationDefaults(symbol, interval, title = '') {
   const suggest = src === 'binance' ? { spread: 0, slip: 0, commPct: 0.1 }
     : Number.isFinite(sp) ? { spread: null, slip: +(sp * 0.25).toPrecision(2), commPct: 0 } // spread: per bar from the broker
     : { spread: +(last * 0.0001).toPrecision(2), slip: +(last * 0.00003).toPrecision(2), commPct: 0 };
-  const t = loadTrials()[`${title || 'Script'}|${symbol}|${normTf(interval)}`];
-  return { src, ann: annFor(src), barSpread: Number.isFinite(sp), medianSpread: Number.isFinite(sp) ? sp : null, lastClose: last, suggest, maxCells: VAL_MAX_CELLS, maxBars: src === 'mock' ? 5000 : VAL_MAX_BARS, prevTrials: t ? t.trials : 0 };
+  const prevTrials = trialsOf(loadTrials(), title || 'Script');
+  return { src, ann: annFor(src), barSpread: Number.isFinite(sp), medianSpread: Number.isFinite(sp) ? sp : null, lastClose: last, suggest, maxCells: VAL_MAX_CELLS, maxBars: src === 'mock' ? 5000 : VAL_MAX_BARS, prevTrials };
 }
 function startValidation(spec, onProgress) {
   const axes = (spec.axes || []).filter(a => a && a.key && Array.isArray(a.values) && a.values.length).map(a => ({ key: String(a.key), label: String(a.label || a.key), values: a.values.slice(0, 60), numeric: a.values.every(v => typeof v === 'number') }));
@@ -697,7 +699,8 @@ async function runValidation(job, spec) {
   if (!symbol || !interval) throw new Error('Нет символа или таймфрейма');
   const code = String(spec.code || '');
   if (!/^\s*strategy\s*\(/m.test(code)) throw new Error('Проверка работает со strategy(): в скрипте нет strategy(…). Попросите Panda переделать индикатор в стратегию.');
-  const bars = await getBars(symbol, interval, Number(spec.bars) || 5000, true, VAL_MAX_BARS);
+  const wantBars = Math.max(300, Math.min(VAL_MAX_BARS, Number(spec.bars) || 5000));
+  const bars = await getBars(symbol, interval, wantBars, true, VAL_MAX_BARS);
   const src = bars.src || sourceFor(symbol);
   if (bars.length < 300) throw new Error(`Мало истории: ${bars.length} баров`);
   const cells = [], base = spec.baseInputs && typeof spec.baseInputs === 'object' ? spec.baseInputs : {};
@@ -730,11 +733,11 @@ async function runValidation(job, spec) {
   else costs = { spread: Math.max(0, Number(c.spread) || 0), spreadAt: null, source: 'заданы вручную' };
   Object.assign(costs, { slip: Math.max(0, Number(c.slip) || 0), commPct: Math.max(0, Number(c.commPct) || 0) });
   const days = [...new Set(bars.map(b => Math.floor(b.openTime / 86400000)))];
-  const all = loadTrials(), key = trialsKey(code, symbol, interval), prev = all[key] || { trials: 0, runs: [] };
-  const report = buildReport({ axes: spec.axes, cells, costs, trialsBefore: prev.trials, minTrades: 10,
+  const all = loadTrials(), key = trialsKey(code), prev = all[key] || { trials: 0, runs: [] }, before = trialsOf(all, key);
+  const report = buildReport({ axes: spec.axes, cells, costs, trialsBefore: before, minTrades: 10,
     bars: { from: Math.floor(bars[0].openTime / 1000), to: Math.floor(bars[bars.length - 1].closeTime / 1000), days, ann: annFor(src), capital: capital || 10000, count: bars.length } });
-  report.meta = { title: title || pineTitle(code), symbol, interval, src, broker: src === 'mt5' ? (MT5.info?.server || '') : src, baseInputs: base, prevTrials: prev.trials, ms: Date.now() - job.startedAt, at: new Date().toISOString() };
-  prev.trials += job.total; prev.runs = [...(prev.runs || []), { at: report.meta.at, cells: job.total, verdict: report.verdict.code }].slice(-50);
+  report.meta = { title: title || pineTitle(code), symbol, interval, src, broker: src === 'mt5' ? (MT5.info?.server || '') : src, baseInputs: base, prevTrials: before, barsRequested: wantBars, ms: Date.now() - job.startedAt, at: new Date().toISOString() };
+  prev.trials += job.total; prev.runs = [...(prev.runs || []), { at: report.meta.at, symbol, interval, cells: job.total, verdict: report.verdict.code }].slice(-50);
   all[key] = prev; try { fs.writeFileSync(VAL_TRIALS_FILE, JSON.stringify(all, null, 1)); } catch { /* read-only — counter stays in memory for this run */ }
   job.report = report; job.state = 'done'; job.onProgress && job.onProgress(job);
 }
@@ -743,8 +746,8 @@ const jobView = j => ({ id: j.id, state: j.state, done: j.done, total: j.total, 
 function summarizeValidation(rep) {
   const f = (x, d = 2) => (Number.isFinite(x) ? x.toFixed(d) : '—'), L = [];
   L.push(`VERDICT: ${rep.verdict.title}`);
-  L.push(`data: ${rep.meta.symbol} ${rep.meta.interval}, ${rep.bars.count} bars ${new Date(rep.bars.from * 1000).toISOString().slice(0, 10)}…${new Date(rep.bars.to * 1000).toISOString().slice(0, 10)}; costs: ${rep.costs.source}, spread ${f(rep.costs.spread, 4)}, slip ${f(rep.costs.slip, 4)}/side, comm ${f(rep.costs.commPct, 3)}%/side`);
-  L.push(`grid: ${rep.grid.axes.map(a => `${a.label}=[${a.values.join(',')}]`).join(' × ')} = ${rep.grid.total} runs; trials counted for deflation: ${rep.trials} (incl. ${rep.meta.prevTrials} earlier)`);
+  L.push(`data: ${rep.meta.symbol} ${rep.meta.interval}, ${rep.bars.count} bars${rep.meta.barsRequested && rep.bars.count < rep.meta.barsRequested * 0.98 ? ` (requested ${rep.meta.barsRequested} — the data source has no more history${rep.meta.src === 'mt5' ? '; MT5 also limits it by Tools → Options → Charts → Max bars in chart' : ''})` : ''} ${new Date(rep.bars.from * 1000).toISOString().slice(0, 10)}…${new Date(rep.bars.to * 1000).toISOString().slice(0, 10)}; costs: ${rep.costs.source}, spread ${f(rep.costs.spread, 4)}, slip ${f(rep.costs.slip, 4)}/side, comm ${f(rep.costs.commPct, 3)}%/side`);
+  L.push(`grid: ${rep.grid.axes.map(a => `${a.label}=[${a.values.join(',')}]`).join(' × ')} = ${rep.grid.total} runs; trials counted for deflation: ${rep.trials} (incl. ${rep.meta.prevTrials} earlier runs of this strategy on any symbol/timeframe)`);
   if (rep.region) {
     const R = rep.region, C = rep.center;
     L.push(`region: ${R.size} cells${R.edge ? ' (touches grid edge — widen it)' : ''}, mean Sharpe ${f(R.mean)} ± ${f(R.se)}; profitable ${(R.profitableShare * 100).toFixed(0)}% of region, ${(R.gridProfitableShare * 100).toFixed(0)}% of grid`);
