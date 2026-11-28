@@ -2,47 +2,58 @@
 
 # 🐼 Pandich Lab
 
-**ИИ-лаборатория трейдера** — график, ИИ-ассистент и честный бэктест: бесплатно, открытый код, на твоём ПК.<br>
-**An AI lab for traders** — charts, an AI assistant and honest backtesting: free, open source, on your own PC.
+### An AI lab for traders
+
+Describe a strategy in plain words — the AI writes Pine Script® v6, draws it on a live chart<br>and an honest validator tells you whether it has a real edge. Free, open source, runs on your own PC.
 
 [![Release](https://img.shields.io/github/v/release/pandich93/pandich-lab?label=download&color=2962ff)](https://github.com/pandich93/pandich-lab/releases/latest)
+[![Stars](https://img.shields.io/github/stars/pandich93/pandich-lab?style=flat&color=f5a524)](https://github.com/pandich93/pandich-lab/stargazers)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-26a69a)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-555)
 
-### [⬇ Windows](https://github.com/pandich93/pandich-lab/releases/latest/download/PandichLab-Setup.exe) &nbsp;·&nbsp; [⬇ macOS](https://github.com/pandich93/pandich-lab/releases/latest/download/PandichLab-mac.dmg)
+### [⬇ Download for Windows](https://github.com/pandich93/pandich-lab/releases/latest/download/PandichLab-Setup.exe) &nbsp;·&nbsp; [⬇ Download for macOS](https://github.com/pandich93/pandich-lab/releases/latest/download/PandichLab-mac.dmg)
 
-[Русский](#русский) · [English](#english) · [O'zbekcha](#ozbekcha) · [Install with AI](#-install-with-an-ai-agent)
+**English** · [Русский](README.ru.md) · [O'zbekcha](README.uz.md)
 
-![Pandich Lab: first-run tour and an honest strategy check on real BTCUSDT 1h data](docs/img/demo.gif)
+![Pandich Lab: first-run tour and an honest strategy check on real BTCUSDT 1h data](docs/img/demo_en.gif)
 
-<sub>Тур первого запуска и честная проверка стратегии на реальных данных BTCUSDT 1h (Binance). Вердикт этого примера — «нет значимого перевеса».</sub>
+<sub>First-run tour and an honest check of the example strategy on real BTCUSDT 1h data from Binance. Its verdict: no significant edge.</sub>
 
 </div>
 
-### Что нужно · What you need
+## Why Pandich Lab
 
-| | Бесплатно, сразу · Free, right away | Нужно своё · Bring your own |
+- **From idea to chart in one message.** Tell Panda (Claude) what you want; it writes Pine Script v6, runs it on your chart, reads its own errors and fixes them. The code pastes straight into TradingView.
+- **Backtests that don't lie to you.** Many "profitable" strategies are just curve-fitted. Pandich Lab looks for a stable region of parameters instead of the best cell, corrects for the number of trials (deflated Sharpe), checks out-of-sample (walk-forward), runs Monte Carlo and charges the broker's real per-bar spread. You get a plain verdict before you risk money.
+- **A real charting workstation.** Custom timeframes, 38 drawing tools, Market Profile, volume profile, anchored VWAP, multi-chart, Bar Replay with paper trading, alerts to Telegram.
+- **Local and open.** Runs on your machine; your scripts and data never leave it. AGPL-3.0.
+
+⭐ **If Pandich Lab is useful to you, star the repo** — it helps other traders find it.
+
+## What you need
+
+| | Free, right away | Bring your own |
 |---|---|---|
-| Графики, 38 инструментов рисования, Market Profile, профиль объёма, VWAP · Charts, 38 drawing tools, Market Profile, volume profile, VWAP | ✅ | — |
-| Библиотека индикаторов, Pine-редактор, тестер, **честная проверка стратегий** · Indicator library, Pine editor, tester, **honest strategy validation** | ✅ | — |
-| Чат **Panda** (пишет индикаторы и стратегии) · The **Panda** chat (writes indicators and strategies) | — | подписка Claude Pro/Max или API-ключ Anthropic · a Claude Pro/Max subscription or an Anthropic API key |
-| Котировки твоего брокера · Your broker's quotes | — | MetaTrader 5, только Windows (без него — Binance) · MetaTrader 5, Windows only (otherwise Binance) |
+| Charts, drawing tools, Market Profile, volume profile, VWAP | ✅ | — |
+| Indicator library, Pine editor, strategy tester, **honest validation** | ✅ | — |
+| The **Panda** AI chat (writes indicators and strategies) | — | a Claude Pro/Max subscription or an Anthropic API key |
+| Your broker's quotes | — | MetaTrader 5, Windows only (otherwise Binance) |
 
-Windows 10/11 (x64) или macOS 12+. Права администратора не нужны. · Windows 10/11 (x64) or macOS 12+. No admin rights needed.
+Windows 10/11 (x64) or macOS 12+. No admin rights needed.
 
 | Pine editor with live results | Bar Replay with paper trading |
 |---|---|
 | ![Pine editor](docs/img/editor.jpg) | ![Bar Replay](docs/img/replay.jpg) |
 
-## ⬇ Установка за 3 шага · Install in 3 steps
+## Install in 3 steps
 
-1. **Скачай** · **Download:** [Windows — PandichLab-Setup.exe](https://github.com/pandich93/pandich-lab/releases/latest/download/PandichLab-Setup.exe) · [macOS — PandichLab-mac.dmg](https://github.com/pandich93/pandich-lab/releases/latest/download/PandichLab-mac.dmg) (Apple Silicon & Intel).
-2. **Запусти** · **Run it.** Установщики пока не подписаны · The installers are not code-signed yet:
-   - **Windows:** «Windows защитила ваш компьютер» → **Подробнее** → **Выполнить в любом случае** · "Windows protected your PC" → **More info** → **Run anyway**.
-   - **macOS:** перетащи *Pandich Lab* в «Программы»; при блокировке → «Системные настройки» → «Конфиденциальность и безопасность» → **«Всё равно открыть»** · drag *Pandich Lab* into Applications; if blocked → System Settings → Privacy & Security → **Open Anyway**.
-3. **Нажми «Установить всё»** в мастере первого запуска: он сам поставит Claude Code (и на Windows — Git Bash, по желанию Python + MetaTrader5) и откроет вход в Claude. Потом короткий тур покажет, где что, и даст проверить пример стратегии. · **Click «Установить всё» (install everything)** in the first-run wizard: it installs Claude Code (plus Git Bash and, optionally, Python + MetaTrader5 on Windows) and opens the Claude sign-in. Then a short tour shows you around and lets you validate an example strategy.
+1. **Download:** [Windows — PandichLab-Setup.exe](https://github.com/pandich93/pandich-lab/releases/latest/download/PandichLab-Setup.exe) · [macOS — PandichLab-mac.dmg](https://github.com/pandich93/pandich-lab/releases/latest/download/PandichLab-mac.dmg) (Apple Silicon & Intel).
+2. **Run it.** The installers are not code-signed yet:
+   - **Windows:** "Windows protected your PC" → **More info** → **Run anyway**.
+   - **macOS:** drag *Pandich Lab* into Applications; if macOS blocks it → System Settings → Privacy & Security → **Open Anyway**. The macOS build is newer and less tested than Windows.
+3. **Click "Install everything"** in the first-run wizard. It installs Claude Code (plus Git Bash and, optionally, Python + MetaTrader5 on Windows) from the official sites and opens the Claude sign-in. Then a short tour shows you around and lets you validate an example strategy in one click.
 
-Приложение обновляется само. Интерфейс: Русский, O'zbekcha, English. · The app updates itself. Interface: Russian, Uzbek, English.
+The app updates itself. Interface: English, Русский, O'zbekcha. All versions are in [Releases](../../releases).
 
 ## 🤖 Install with an AI agent
 
@@ -101,139 +112,7 @@ From source (Linux, or if I prefer not to use the installer)
   Open http://localhost:3777 . The server listens on 127.0.0.1 only; never expose it to a network.
 ```
 
----
-
-## Русский
-
-### Что это
-
-Pandich Lab — приложение, которое работает у тебя на компьютере: слева чат **Panda** (Claude), справа живой график.
-
-- **Опиши идею словами.** Panda пишет Pine Script v6, сам запускает его на текущем графике через [PineTS](https://www.npmjs.com/package/pinets), читает ошибки, исправляет и рисует результат. Готовый код можно вставить в TradingView.
-- **Проверь стратегию честно, до того как рискнуть деньгами.** Не «лучшие параметры», а устойчивая область сетки и её среднее; поправка на число попыток (deflated Sharpe); walk-forward вне выборки; Монте-Карло; спред брокера по каждому бару и проскальзывание. Итог — понятный вердикт: «нет значимого перевеса», «нужна проверка» или «форвард-тест на демо».
-- **Исследования.** Попроси Panda проверить несколько идей подряд — каждая пройдёт ту же честную проверку, итоги собираются в одну сводку.
-
-Возможности:
-
-- **График:**
-  - любые таймфреймы, включая нестандартные (22m, 90m, 2D);
-  - 10 типов графика, логарифмическая и процентная шкалы;
-  - 38 инструментов рисования, включая профиль объёма (в диапазоне и с привязкой) и VWAP с привязкой;
-  - Market Profile (TPO): POC, зона стоимости, начальный баланс, «голые» POC.
-- **Мульти-график** до 8 окон с синхронизацией символа, интервала, перекрестия и времени.
-- **Pine-редактор** (Monaco): подсветка, автодополнение, ошибки на строке, логи, тестер стратегий, история версий, diff.
-- **Replay:** проигрывание истории бар за баром. Индикаторы на каждом шаге пересчитываются только по открытым барам. Есть бумажные сделки с SL/TP и карточка итогов: profit factor, просадка, кривая эквити, CSV.
-- **Список и алерты:** котировки, ценовые алерты на пересечение уровня (линия на графике, уведомление и Telegram).
-- **Watch:** сервер сам отслеживает `alert()` и `alertcondition()` на закрытии бара и шлёт уведомление в Telegram или в браузер. Работает и при закрытой вкладке.
-- **История:** все чаты с Panda и отчёты проверок сохраняются — поиск, продолжить чат, выгрузка в Markdown.
-- **Библиотека:** 23 встроенных индикатора и стратегии, шаблоны индикаторов, макеты экрана.
-- **Данные:**
-  - крипта с Binance через публичное зеркало;
-  - по желанию свой счёт MetaTrader 5 (только Windows, только чтение котировок).
-
-### Как работает ИИ
-
-Panda работает через твой собственный Claude:
-
-- **По умолчанию** через локальный [Claude Code](https://docs.claude.com/en/docs/claude-code/overview), вошедший в твою подписку Claude (Pro/Max). Запросы расходуют её лимиты.
-- **Или** через твой API-ключ Anthropic: «⚙ Настройки» → карточка Claude → «Свой API-ключ». Ключ хранится только на твоём компьютере, оплата идёт по расходу токенов с твоего счёта Anthropic.
-- Способ входа выбираешь ты сам; приложение не отключает ни один способ входа Claude Code.
-
-Проект не включает и не раздаёт ничьих учётных данных: каждый пользователь подключает свои.
-
-### Приложение для Windows и macOS
-
-Скачать сразу: **Windows** — [PandichLab-Setup.exe](https://github.com/pandich93/pandich-lab/releases/latest/download/PandichLab-Setup.exe), **macOS** — [PandichLab-mac.dmg](https://github.com/pandich93/pandich-lab/releases/latest/download/PandichLab-mac.dmg). Все версии — в [Releases](../../releases):
-- **Windows 10/11 (x64):** `PandichLab-x.y.z-win-x64.exe`. Двойной клик, и приложение установится без прав администратора.
-- **macOS (Apple Silicon и Intel):** `PandichLab-x.y.z-mac-universal.dmg`. Перетащи приложение в «Программы».
-
-При первом запуске откроется мастер с кнопкой **«Установить всё»**. Она сама скачает с официальных сайтов и поставит всё нужное, без прав администратора: на Windows — Claude Code, Git Bash и, по желанию, Python 3.13 с модулем MetaTrader5; на macOS — Claude Code. Затем откроется окно входа в Claude: войдите через подписку в браузере, мастер сам заметит, что вход выполнен. Приложение обновляется само.
-
-> Установщики пока **не подписаны**:
-> - **Windows** покажет «Windows защитила ваш компьютер» → «Подробнее» → «Выполнить в любом случае».
-> - **macOS** заблокирует первый запуск → «Системные настройки» → «Конфиденциальность и безопасность» → «Всё равно открыть».
-
-Собрать установщик самому: `desktop\build-win.bat` (Windows) или `desktop/build-mac.sh` (macOS).
-
-**Установка через ИИ.** Если у тебя на компьютере есть ИИ-агент (Claude Code, Codex CLI, Gemini CLI, Cursor), скопируй в него [промпт из начала страницы](#-install-with-an-ai-agent): он сам скачает релиз, проверит его, установит и запустит, спрашивая разрешение перед каждым шагом.
-
-Сборка для macOS новая и проверена меньше, чем для Windows.
-
-### Частые вопросы
-
-- **Это бесплатно?** Да: графики, библиотека, тестер и честная проверка стратегий бесплатны и работают без регистрации. Платное только одно — твой собственный Claude для чата Panda (подписка Pro/Max или API-ключ). Pandich Lab не берёт за это деньги и не видит твой аккаунт.
-- **Это торговый робот?** Нет. Pandich Lab ничего не покупает и не продаёт и не подключается к счёту для торговли — MetaTrader 5 используется только для чтения котировок.
-- **Проверка сказала «нет значимого перевеса». Это ошибка?** Скорее всего нет: так заканчивается большинство стратегий из соцсетей. Проверка для того и нужна, чтобы узнать это на истории, а не на своём депозите.
-- **Без Claude чем-то можно пользоваться?** Да, всем, кроме чата: графики, рисование, библиотека, Pine-редактор, Replay, алерты, проверка стратегий.
-- **Где мои данные?** Только у тебя на компьютере. Сервер слушает 127.0.0.1 и не открыт в сеть.
-
-### Установка из исходников
-
-Нужно:
-- [Node.js](https://nodejs.org) 18+;
-- [Claude Code](https://docs.claude.com/en/docs/claude-code/overview): `npm install -g @anthropic-ai/claude-code`, затем один раз запустить `claude` и войти.
-
-Без Claude Code график тоже работает, недоступен только чат.
-
-**Windows:**
-1. Распакуй архив и запусти `start.bat`. Он поставит зависимости и откроет http://localhost:3777.
-2. Для котировок MetaTrader 5 (необязательно) нужны 64-битный Python 3 и запущенный терминал MT5. `start.bat` сам поставит пакет `MetaTrader5`.
-3. Claude Code на Windows нужен Git for Windows (Git Bash).
-
-**macOS / Linux:**
-```bash
-./start.sh
-```
-Или вручную: `npm install && npm start`. MT5 здесь недоступен (пакет `MetaTrader5` только для Windows), работают данные Binance.
-
-### Настройка
-
-Скопируй `config.example.json` в `config.json` и измени нужное. Поля в `server.mjs` → `CFG`:
-- `backend`: `claude-code` или `api`;
-- `model`;
-- `claudeBin`;
-- `anthropicApiKey` (для `backend: api`);
-- `python`, `mt5Path`, `mt5Enabled`.
-
-Переменные окружения:
-
-| Переменная | Назначение |
-|---|---|
-| `PORT` | порт сервера, по умолчанию 3777 |
-| `QL_PYTHON` | команда Python для моста MT5 |
-| `MT5_PATH` | путь к `terminal64.exe`, если терминалов несколько |
-| `MT5=0` | отключить MT5 |
-| `MOCK=1` | синтетические данные для разработки |
-
-Личные данные хранятся только у тебя и в git не попадают (`.gitignore`):
-- `data/`: сигналы Watch, настройки Telegram, шаблоны, макеты;
-- `scripts/`: сохранённые скрипты.
-
-### Язык интерфейса
-
-Русский, O'zbekcha и English. Язык выбирается в мастере первого запуска или в «⚙ Настройки» → «Приложение». Panda отвечает на языке интерфейса.
-
-### Если что-то не подключается
-
-Нажмите **⚙ Настройки** в правом верхнем углу. Там видно состояние Claude Code (Panda), MetaTrader 5, Binance, интернета и Telegram. Для каждой проблемы написано, что сделать, и есть кнопки: «Проверить Panda», «Войти в Claude», «Установить Claude Code», «Переподключить MT5», «Установить модуль». Точка на кнопке настроек показывает общее состояние: зелёная — всё в порядке, жёлтая — предупреждение, красная — проблема.
-
-Не получается — нажмите **«Скопировать диагностику»** и пришлите текст в [Issues](https://github.com/pandich93/pandich-lab/issues). Путь к домашней папке, имя пользователя, токены и номер счёта в отчёте скрываются.
-
-### Безопасность
-
-- Сервер слушает только `127.0.0.1`. **Не открывай его в сеть и не выставляй в интернет:** в нём нет авторизации.
-- Panda запускается в Claude Code с разрешением читать и писать файлы в папке `agent/` и выполнять `node ql.mjs …`, без подтверждения каждого шага (`--permission-mode dontAsk`). Pine-код выполняется в процессе сервера.
-- Запускай только код, которому доверяешь.
-
-### Отказ от ответственности
-
-Это инструмент для исследования и обучения, а **не инвестиционная рекомендация**. Индикаторы, сигналы, Replay и бэктесты могут ошибаться. Торговля на финансовых рынках связана с риском потери средств. Авторы не несут ответственности за твои торговые решения.
-
----
-
-## English
-
-### What it is
+## Features
 
 Pandich Lab is a local app: an AI chat called **Panda** (Claude) on the left, a live chart on the right.
 
@@ -259,38 +138,24 @@ Features:
   - crypto from Binance via its public data mirror;
   - optionally your own MetaTrader 5 account (Windows only, read-only quotes).
 
-### How the AI works
+## How the AI works
 
 Panda runs on **your own** Claude:
 
 - **By default** through a local [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) signed in to your Claude subscription. Usage counts against that plan's limits.
-- **Or** with your own Anthropic API key: «⚙ Настройки» (Settings) → Claude card → «Свой API-ключ». The key stays on your computer; usage is billed to your Anthropic account.
+- **Or** with your own Anthropic API key: **⚙ Settings** → Claude card → **Own API key**. The key stays on your computer; usage is billed to your Anthropic account.
 - You choose the sign-in method; the app does not disable any of Claude Code's sign-in methods.
 
 The project ships no credentials; every user brings their own.
 
-### Desktop app (Windows & macOS)
-
-Installers are in [Releases](../../releases):
-- **Windows 10/11 (x64):** `PandichLab-x.y.z-win-x64.exe`, a one-click install without admin rights.
-- **macOS (Apple Silicon & Intel):** `PandichLab-x.y.z-mac-universal.dmg`.
-
-On first launch the setup wizard offers one **«Установить всё»** (install everything) button. It downloads everything from the official sites and installs it without admin rights: Claude Code, Git Bash and, optionally, Python 3.13 with the MetaTrader5 module on Windows; Claude Code on macOS. Then it opens the Claude sign-in and notices when you are signed in. The app updates itself.
-
-> The installers are **not code-signed** yet:
-> - **Windows SmartScreen:** "More info" → "Run anyway".
-> - **macOS:** System Settings → Privacy & Security → "Open Anyway".
-
-Build it yourself: `desktop\build-win.bat` or `desktop/build-mac.sh`.
-
-### FAQ
+## FAQ
 
 - **Is it free?** Yes: charts, the library, the tester and honest strategy validation are free and need no account. The only paid part is your own Claude for the Panda chat (a Pro/Max subscription or an API key). Pandich Lab charges nothing for it and never sees your account.
 - **Is it a trading bot?** No. It never places orders and does not trade on your account — MetaTrader 5 is used for reading quotes only.
 - **The check says "no significant edge". Is that a bug?** Most likely not: that's how most social-media strategies end. That's the point — learn it on history, not on your deposit.
 - **Can I use it without Claude?** Yes, everything except the chat.
 
-### Install from source
+## Install from source
 
 Requirements:
 - [Node.js](https://nodejs.org) 18+;
@@ -301,7 +166,9 @@ The chart works without Claude Code; only the chat needs it.
 - **Windows:** run `start.bat`. MetaTrader 5 quotes need 64-bit Python 3 and a running MT5 terminal; `start.bat` installs the `MetaTrader5` package.
 - **macOS / Linux:** run `./start.sh`, or `npm install && npm start`. Binance data only.
 
-### Configuration
+Build the installer yourself: `desktop\build-win.bat` (Windows) or `desktop/build-mac.sh` (macOS).
+
+## Configuration
 
 Copy `config.example.json` to `config.json`.
 
@@ -315,74 +182,25 @@ Copy `config.example.json` to `config.json`.
 
 Your data stays in `data/` and `scripts/`, both git-ignored.
 
-### Interface language
+## Interface language
 
-Russian, Uzbek (O'zbekcha) and English. Pick it in the first-run wizard or in «⚙ Настройки» (Settings) → App. Panda replies in the interface language.
+Russian, Uzbek (O'zbekcha) and English. Pick it in the first-run wizard or in **⚙ Settings** → **App**. Panda replies in the interface language.
 
-### Troubleshooting connections
+## Troubleshooting connections
 
-Click **⚙ Настройки** (Settings) in the top-right corner. It shows the status of Claude Code (Panda), MetaTrader 5, Binance, the internet and Telegram. Each problem comes with a plain-language fix and one-click actions: test Panda, sign in to Claude, install Claude Code, reconnect MT5, install the Python module. The dot on the Settings button shows the overall state: green means all good, yellow a warning, red a problem.
+Click **⚙ Settings** in the top-right corner. It shows the status of Claude Code (Panda), MetaTrader 5, Binance, the internet and Telegram. Each problem comes with a plain-language fix and one-click actions: test Panda, sign in to Claude, install Claude Code, reconnect MT5, install the Python module. The dot on the Settings button shows the overall state: green means all good, yellow a warning, red a problem.
 
-Still stuck? Click **«Скопировать диагностику»** (copy diagnostics) and paste the report into an [Issue](https://github.com/pandich93/pandich-lab/issues). The home path, user name, tokens and account number are masked in the report.
+Still stuck? Click **Copy diagnostics** and paste the report into an [Issue](https://github.com/pandich93/pandich-lab/issues). The home path, user name, tokens and account number are masked in the report.
 
-### Security
+## Security
 
 - The server binds to `127.0.0.1` and has no authentication. **Never expose it to a network.**
 - Panda runs inside Claude Code with permission to edit files in `agent/` and run `node ql.mjs …` without step-by-step confirmation. Pine code executes inside the server process.
 
-### Disclaimer
+## Disclaimer
 
 For research and education only. **Not financial advice.** Indicators, signals, replays and backtests can be wrong. Trading involves risk of loss.
 
----
-
-## O'zbekcha
-
-### Bu nima
-
-Pandich Lab — kompyuteringizda ishlaydigan dastur: o'ngda jonli grafik, chapda **Panda** ismli AI yordamchi.
-
-- **G'oyani so'z bilan tasvirlang.** Panda Pine Script v6 kodini yozadi, grafikda ishga tushiradi, xatolarni tuzatadi va natijani chizadi. Tayyor kodni TradingView'ga qo'yishingiz mumkin.
-- **Strategiyani pul tavakkal qilishdan oldin halol tekshiring.** «Eng yaxshi parametrlar» emas, balki parametrlar to'rining barqaror hududi va uning o'rtachasi; urinishlar soniga tuzatish; tanlamadan tashqari walk-forward; Monte-Karlo; brokerning har bir shamdagi spredi. Natija — tushunarli xulosa.
-
-Imkoniyatlar:
-
-- **Grafik:** istalgan taymfreym (22m, 90m, 2D ham), 10 xil grafik turi, 38 ta chizish asbobi (hajm profili va VWAP ham), Market Profile.
-- **Multi-grafik:** bir ekranda 8 tagacha grafik, sinxronlashtirish bilan.
-- **Pine-muharrir:** kod yozish, xatolar, loglar, strategiya testeri, versiyalar tarixi.
-- **Replay:** tarixni sham-shamlab qayta o'ynatish va qog'ozda savdo qilish.
-- **Ro'yxat va alertlar, Watch:** narx alertlari va signallar Telegram'ga, oyna yopiq bo'lsa ham.
-- **Tarix:** Panda bilan barcha chatlar va tekshiruv hisobotlari saqlanadi.
-- **Kutubxona:** 23 ta tayyor indikator va strategiya, shablonlar, ekran maketlari.
-- **Ma'lumotlar:** Binance (kripto) va, xohlasangiz, o'z MetaTrader 5 hisobingiz (faqat Windows).
-
-### O'rnatish
-
-1. Faylni yuklab oling: **Windows** — [PandichLab-Setup.exe](https://github.com/pandich93/pandich-lab/releases/latest/download/PandichLab-Setup.exe), **macOS** — [PandichLab-mac.dmg](https://github.com/pandich93/pandich-lab/releases/latest/download/PandichLab-mac.dmg).
-2. Ishga tushiring.
-   - **Windows** ogohlantirsa: **Подробнее / More info** → **Выполнить в любом случае / Run anyway**.
-   - **macOS** bloklasa: System Settings → Privacy & Security → **Open Anyway**.
-3. Birinchi ishga tushirishda **«Установить всё»** tugmasini bosing: dastur kerakli hamma narsani o'zi o'rnatadi (Windows: Claude Code, Git Bash, xohlasangiz Python + MetaTrader5; Mac: Claude Code). Keyin brauzerda Claude akkauntingizga kiring. Qisqa sayohat nima qayerdaligini ko'rsatadi va namuna strategiyani tekshirib ko'rishni taklif qiladi.
-
-Yoki AI-agentingiz bo'lsa, [yuqoridagi promptni](#-install-with-an-ai-agent) unga nusxalang — o'zi o'rnatib beradi.
-
-### AI qanday ishlaydi
-
-Panda sizning o'z **Claude** obunangiz (Pro/Max) yoki API kalitingiz orqali, kompyuteringizdagi Claude Code yordamida ishlaydi. Chatdan boshqa hamma narsa — grafiklar, kutubxona, strategiyalarni tekshirish — obunasiz va bepul ishlaydi. Pandich Lab savdo roboti emas: hech qanday buyurtma bermaydi.
-
-### Interfeys tili
-
-Ruscha, O'zbekcha va English. Tilni birinchi ishga tushirishdagi sozlash ustasida yoki «⚙ Sozlamalar» → «Ilova» bo'limida tanlang. Panda interfeys tilida javob beradi.
-
-### Ulanish bilan muammo bo'lsa
-
-O'ng yuqoridagi **⚙ Настройки** tugmasini bosing: Claude Code (Panda), MetaTrader 5, Binance, internet va Telegram holati ko'rinadi. Har bir muammo uchun nima qilish kerakligi yozilgan va tuzatish tugmalari bor. Hal bo'lmasa, **«Скопировать диагностику»** tugmasini bosib, matnni dasturchiga yuboring.
-
-### Ogohlantirish
-
-Bu o'rganish va tahlil uchun vosita, **investitsiya maslahati emas**. Moliyaviy bozorlarda savdo qilish pul yo'qotish xavfi bilan bog'liq.
-
----
 
 ## License
 
