@@ -6,6 +6,8 @@
 //   node ql.mjs bars <interval> [n] [SYMBOL]  OHLCV CSV of another timeframe/symbol (n ≤ 500)
 //   node ql.mjs draw '<json>' | --file f.json draw object(s) on the chart (JSON object or array)
 //   node ql.mjs draw-clear                    remove drawings previously made by Panda
+//   node ql.mjs validate --file spec.json     honest grid validation of a strategy (region, deflated Sharpe, walk-forward, Monte Carlo, verdict)
+//   node ql.mjs validate-status <job id>      wait for a validation that is still running
 // Env (set by server when it spawns claude): QL_PORT, QL_SID
 import fs from 'node:fs';
 import path from 'node:path';
@@ -34,10 +36,17 @@ try {
     const raw = rest[0] === '--file' ? fs.readFileSync(path.resolve(rest[1]), 'utf8') : rest.join(' ');
     let items; try { items = JSON.parse(raw); } catch (e) { console.log(`ERROR: invalid JSON: ${e.message}`); process.exit(1); }
     out(await post('/api/agent/draw', { items }));
+  } else if (cmd === 'validate' && rest[0]) {
+    const raw = rest[0] === '--file' ? fs.readFileSync(path.resolve(rest[1]), 'utf8') : rest.join(' ');
+    let spec; try { spec = JSON.parse(raw); } catch (e) { console.log(`ERROR: invalid JSON: ${e.message}`); process.exit(1); }
+    if (spec.file) { spec.code = fs.readFileSync(path.resolve(spec.file), 'utf8'); delete spec.file; }
+    out(await post('/api/agent/validate', { spec }));
+  } else if (cmd === 'validate-status' && rest[0]) {
+    out(await post('/api/agent/validate-status', { id: rest[0] }));
   } else if (cmd === 'draw-clear') {
     out(await post('/api/agent/draw-clear', {}));
   } else {
-    console.log('Usage: node ql.mjs run <file.pine> | chart <SYMBOL> [tf] | context | bars <tf> [n] [SYMBOL] | draw \'<json>\' | draw --file f.json | draw-clear');
+    console.log('Usage: node ql.mjs run <file.pine> | chart <SYMBOL> [tf] | context | bars <tf> [n] [SYMBOL] | draw \'<json>\' | draw --file f.json | draw-clear | validate --file spec.json | validate-status <id>');
     process.exit(2);
   }
 } catch (e) {

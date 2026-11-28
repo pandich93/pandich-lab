@@ -629,3 +629,60 @@ body.embed .legend{max-width:85%}
 .ind-row .sp{flex:1}
 .ind-row.off .ind-bool span,.ind-row.off .ind-sw,.ind-row.off .ind-w{opacity:.45}
 .ind-b select.ind-w{width:72px}
+
+/* ───── strategy validation ───── */
+.vd-dlg.vd-setup{width:560px}
+.vd-dlg.vd-prog{width:420px;height:auto}
+.vd-dlg.vd-rep{width:900px;height:min(820px,calc(100vh - 40px))}
+.vd-b{padding-top:4px}
+.vd-lead{color:var(--muted);font-size:12.5px;line-height:1.5;margin:10px 0 2px}
+.vd-hint{color:var(--muted);font-size:12px;line-height:1.45;margin:4px 0 6px}
+.vd-ax{display:flex;align-items:center;gap:8px;min-height:36px}
+.vd-ax.off .vd-rng,.vd-ax.off .vd-list{opacity:.4}
+.vd-rng{display:flex;align-items:center;gap:5px}
+.vd-rng i{font-style:normal;color:var(--muted);font-size:11.5px}
+.ind-b .vd-rng input.ind-num{width:64px}
+.vd-cnt{width:38px;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+.vd-list{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vd-total{margin:8px 0 2px;font-size:13px}
+.vd-w{color:#f0b429}
+.vd-pb{margin:6px 0 0}
+.ind-row.off{opacity:.4;pointer-events:none}
+.ind-b input.ind-num#vdSpread,.ind-b input.ind-num#vdSlip,.ind-b input.ind-num#vdComm{width:110px}
+.vd-est{font-size:12px}
+.vd-progtxt{margin:18px 0 10px;font-variant-numeric:tabular-nums}
+.vd-bar{height:6px;background:var(--bg);border-radius:4px;overflow:hidden;margin-bottom:10px}
+.vd-bar i{display:block;height:100%;width:0;background:var(--blue);transition:width .3s}
+.vd-verdict{margin:12px 0 6px;padding:12px 14px;border-radius:8px;border:1px solid var(--line)}
+.vd-verdict.bad{background:rgba(239,83,80,.10);border-color:rgba(239,83,80,.45)}
+.vd-verdict.warn{background:rgba(240,180,41,.10);border-color:rgba(240,180,41,.45)}
+.vd-verdict.ok{background:rgba(38,166,154,.12);border-color:rgba(38,166,154,.5)}
+.vd-verdict.na{background:var(--panel2)}
+.vd-vt{font-weight:700;font-size:15px;letter-spacing:.02em}
+.vd-verdict ul{margin:8px 0 0;padding-left:18px;font-size:12.5px;line-height:1.55;color:var(--text)}
+.vd-vs{margin-top:6px;font-size:12.5px}
+.vd-meta{color:var(--muted);font-size:12px;margin:2px 0 4px}
+.vd-center{margin:10px 0;font-size:13px;line-height:1.5}
+.vd-b .stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin:6px 0}
+.vd-b .stat{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+.vd-eq{width:100%;height:140px;background:var(--bg);border:1px solid var(--line);border-radius:6px;margin:6px 0}
+.vd-heatwrap{overflow:auto;max-width:100%}
+table.vd-heat{border-collapse:separate;border-spacing:2px;font-size:11px;font-variant-numeric:tabular-nums}
+table.vd-heat th{color:var(--muted);font-weight:500;padding:2px 6px;white-space:nowrap}
+table.vd-heat td{min-width:40px;height:24px;text-align:center;border-radius:3px;cursor:default;border:1px solid transparent}
+table.vd-heat td.rg{border-color:rgba(255,255,255,.55)}
+table.vd-heat td.cn{border:2px solid #fff;font-weight:700}
+table.vd-gates,table.vd-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+table.vd-gates td,table.vd-tbl td,table.vd-tbl th{padding:5px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+table.vd-tbl th{color:var(--muted);font-weight:500;text-align:left}
+table.vd-gates td.ic{width:18px;font-weight:700;text-align:center}
+table.vd-gates tr.pass td.ic{color:var(--green)} table.vd-gates tr.warn td.ic{color:#f0b429} table.vd-gates tr.fail td.ic{color:var(--red)}
+table.vd-gates td.v{white-space:nowrap;font-variant-numeric:tabular-nums}
+table.vd-gates td.nt{color:var(--muted)}
+.vd-card{border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin:6px 0;background:var(--panel2);font-size:12.5px}
+.vd-card.bad{border-color:rgba(239,83,80,.5)} .vd-card.warn{border-color:rgba(240,180,41,.5)} .vd-card.ok{border-color:rgba(38,166,154,.55)}
+.vd-ct{margin-bottom:4px} .vd-cl{color:var(--muted);margin:2px 0}
+.vd-card .st-chatbtn{margin-top:6px}
+.ep-valrow{display:flex;align-items:center;gap:10px;margin:6px 0 2px}
+.ep-valrow .muted{flex:1}
+.ep-valnote{font-size:11.5px;margin-bottom:6px}

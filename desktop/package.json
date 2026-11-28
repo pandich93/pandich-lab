@@ -44,6 +44,7 @@
         "to": "server",
         "filter": [
           "server.mjs",
+          "validate.mjs",
           "mt5bridge.py",
           "package.json",
           "LICENSE",

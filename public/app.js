@@ -519,6 +519,7 @@ function renderLegend() {
       (s.error ? '<span class="err" title="ошибка">⚠</span>' : '') +
       `<button data-a="eye" title="Показать/скрыть">${s.visible ? '◉' : '○'}</button>` +
       `<button data-a="cfg" title="Настройки">⚙</button>` +
+      (window.QLValidate && window.QLValidate.isStrategy(s) ? `<button data-a="val" title="Проверка стратегии">✓</button>` : '') +
       `<button data-a="code" title="Код">⟨/⟩</button>` +
       `<button data-a="del" title="Удалить">✕</button>`;
     row.querySelector('.nm').onclick = () => selectScript(S.selectedId === s.id ? null : s.id);
@@ -526,6 +527,7 @@ function renderLegend() {
       const a = b.dataset.a;
       if (a === 'eye') { s.visible = !s.visible; saveScripts(); if (s.visible && !s.result) await runScript(s); renderAll(); }
       if (a === 'cfg') openInputs(s);
+      if (a === 'val') window.QLValidate.openSetup(s);
       if (a === 'code') { selectScript(s.id); window.QLPanels && window.QLPanels.openEditor(s.id); }
       if (a === 'del') { S.scripts = S.scripts.filter(x => x !== s); if (S.selectedId === s.id) selectScript(null); saveScripts(); renderAll(); }
     });
@@ -1096,6 +1098,7 @@ async function send(text, opts = {}) {
         }
         else if (ev.type === 'preview' || ev.type === 'script') await applyAgentScript(target, ev.name, ev.code, ev.result);
         else if (ev.type === 'chart') await setChart(ev.symbol, ev.interval);
+        else if (ev.type === 'validation' && window.QLValidate) msgs.insertBefore(window.QLValidate.chatCard(ev.report, target.id ? S.scripts.find(x => x.id === target.id) : null), statusEl);
         else if (ev.type === 'draw' && window.QLDraw) { for (const it of ev.items) window.QLDraw.add(it.type, it.pts, it.style); }
         else if (ev.type === 'draw-clear' && window.QLDraw) window.QLDraw.removeAgent();
         else if (ev.type === 'error') {

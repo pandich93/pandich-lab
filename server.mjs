@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 import { PineTS, Indicator, BaseProvider } from 'pinets';
+import { buildReport } from './validate.mjs';
 
 // ── recent server log lines (Settings → «Скопировать диагностику»)
 const LOGBUF = [];
@@ -130,8 +131,8 @@ function aggregate(bars, tf) {
   const out = []; let cur = null;
   for (const b of bars) {
     const k = bucketStart(b.openTime / 1000, tf) * 1000;
-    if (!cur || cur.openTime !== k) { cur && out.push(cur); cur = { openTime: k, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume, closeTime: k + tfSec(tf) * 1000 - 1, _first: b.openTime }; }
-    else { cur.high = Math.max(cur.high, b.high); cur.low = Math.min(cur.low, b.low); cur.close = b.close; cur.volume += b.volume; }
+    if (!cur || cur.openTime !== k) { cur && out.push(cur); cur = { openTime: k, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume, closeTime: k + tfSec(tf) * 1000 - 1, _first: b.openTime }; if (b.spread !== undefined) cur.spread = b.spread; }
+    else { cur.high = Math.max(cur.high, b.high); cur.low = Math.min(cur.low, b.low); cur.close = b.close; cur.volume += b.volume; if (b.spread !== undefined) cur.spread = Math.max(cur.spread ?? 0, b.spread); }
   }
   cur && out.push(cur);
   if (out.length > 1 && out[0]._first !== out[0].openTime) out.shift(); // first bucket is incomplete
@@ -287,6 +288,7 @@ async function fetchMT5(symbol, interval, count) {
   for (let i = 0; i < r.t.length; i++) {
     const openTime = (r.t[i] - off) * 1000;
     out[i] = { openTime, open: r.o[i], high: r.h[i], low: r.l[i], close: r.c[i], volume: r.rv[i] > 0 ? r.rv[i] : r.tv[i], closeTime: openTime + stepMs - 1 };
+    if (r.sp && r.pt) out[i].spread = r.sp[i] * r.pt; // price units
   }
   return out;
 }
@@ -343,16 +345,17 @@ async function fetchBinance(symbol, interval, limit) {
   throw lastErr;
 }
 
-async function getBars(symbol, interval, limit, fresh = false) {
+async function getBars(symbol, interval, limit, fresh = false, cap = CFG.maxBars) {
   interval = normTf(interval);
   if (!interval) throw new Error('Unsupported interval');
-  limit = Math.max(50, Math.min(CFG.maxBars, Number(limit) || CFG.defaultBars));
+  limit = Math.max(50, Math.min(cap, Number(limit) || CFG.defaultBars));
   const key = `${symbol}|${interval}|${limit}`;
   const hit = barCache.get(key);
   const ttl = Math.min(INTERVALS[interval] * 1000, 30000);
   if (hit && !fresh && Date.now() - hit.ts < ttl) return hit.bars;
   const src = sourceFor(symbol);
   const bars = await fetchAny(src, symbol, interval, limit);
+  Object.defineProperty(bars, 'src', { value: src, enumerable: false, configurable: true });
   barCache.set(key, { ts: Date.now(), bars, src });
   return bars;
 }
@@ -579,6 +582,97 @@ async function watchTick() {
 setInterval(watchTick, 5000);
 
 
+// ───────────────────────── STRATEGY VALIDATION (grid → region → deflated Sharpe → walk-forward → Monte Carlo → verdict) ─────────────────────────
+const VAL_MAX_CELLS = 400, VAL_MAX_BARS = 20000, VAL_TRIALS_FILE = path.join(DATA_DIR, 'validate_trials.json');
+const VJOBS = new Map(); let vjobSeq = 0;
+const loadTrials = () => { try { return JSON.parse(fs.readFileSync(VAL_TRIALS_FILE, 'utf8')); } catch { return {}; } };
+const pineTitle = code => (String(code).match(/^\s*strategy\s*\(\s*(?:title\s*=\s*)?["']([^"']+)["']/m) || [])[1] || '';
+// every grid cell, every rerun after "tweak it" — all count as trials for the deflated Sharpe; keyed by strategy title (survives code edits)
+function trialsKey(code, symbol, interval) { return `${pineTitle(code) || 'Script'}|${symbol}|${interval}`; }
+const annFor = src => (src === 'binance' ? 365 : 252);
+function medianOf(a) { const b = a.filter(Number.isFinite).sort((x, y) => x - y); return b.length ? b[b.length >> 1] : NaN; }
+async function validationDefaults(symbol, interval, title = '') {
+  const bars = await getBars(symbol, interval, CFG.defaultBars);
+  const src = bars.src || sourceFor(symbol);
+  const sp = medianOf(bars.map(b => b.spread).filter(x => x > 0));
+  const last = bars[bars.length - 1]?.close || 0;
+  const suggest = src === 'binance' ? { spread: 0, slip: 0, commPct: 0.1 }
+    : Number.isFinite(sp) ? { spread: null, slip: +(sp * 0.25).toPrecision(2), commPct: 0 } // spread: per bar from the broker
+    : { spread: +(last * 0.0001).toPrecision(2), slip: +(last * 0.00003).toPrecision(2), commPct: 0 };
+  const t = loadTrials()[`${title || 'Script'}|${symbol}|${normTf(interval)}`];
+  return { src, ann: annFor(src), barSpread: Number.isFinite(sp), medianSpread: Number.isFinite(sp) ? sp : null, lastClose: last, suggest, maxCells: VAL_MAX_CELLS, maxBars: src === 'mock' ? 5000 : VAL_MAX_BARS, prevTrials: t ? t.trials : 0 };
+}
+function startValidation(spec, onProgress) {
+  const axes = (spec.axes || []).filter(a => a && a.key && Array.isArray(a.values) && a.values.length).map(a => ({ key: String(a.key), label: String(a.label || a.key), values: a.values.slice(0, 60), numeric: a.values.every(v => typeof v === 'number') }));
+  const total = axes.reduce((p, a) => p * a.values.length, 1);
+  if (!axes.length) throw new Error('Выберите хотя бы один параметр для сетки');
+  if (total > VAL_MAX_CELLS) throw new Error(`Слишком большая сетка: ${total} прогонов (максимум ${VAL_MAX_CELLS}). Уменьшите шаг или число параметров.`);
+  const id = 'v' + (++vjobSeq) + Date.now().toString(36);
+  const job = { id, state: 'running', done: 0, total, startedAt: Date.now(), error: null, report: null, cancel: false, onProgress };
+  VJOBS.set(id, job); for (const k of [...VJOBS.keys()].slice(0, -6)) VJOBS.delete(k);
+  runValidation(job, { ...spec, axes }).catch(e => { job.state = 'error'; job.error = e.message || String(e); job.onProgress && job.onProgress(job); });
+  return job;
+}
+async function runValidation(job, spec) {
+  const symbol = String(spec.symbol || '').toUpperCase(), interval = normTf(spec.interval);
+  if (!symbol || !interval) throw new Error('Нет символа или таймфрейма');
+  const code = String(spec.code || '');
+  if (!/^\s*strategy\s*\(/m.test(code)) throw new Error('Проверка работает со strategy(): в скрипте нет strategy(…). Попросите Panda переделать индикатор в стратегию.');
+  const bars = await getBars(symbol, interval, Number(spec.bars) || 5000, true, VAL_MAX_BARS);
+  const src = bars.src || sourceFor(symbol);
+  if (bars.length < 300) throw new Error(`Мало истории: ${bars.length} баров`);
+  const cells = [], base = spec.baseInputs && typeof spec.baseInputs === 'object' ? spec.baseInputs : {};
+  const dims = spec.axes.map(a => a.values.length);
+  let capital = 0, title = '';
+  for (let i = 0; i < job.total; i++) {
+    if (job.cancel) { job.state = 'cancelled'; job.onProgress && job.onProgress(job); return; }
+    let r = i; const v = new Array(dims.length), inputs = {};
+    for (let k = dims.length - 1; k >= 0; k--) { v[k] = r % dims[k]; r = Math.floor(r / dims[k]); }
+    spec.axes.forEach((a, k) => { inputs[a.key] = a.values[v[k]]; });
+    try {
+      const res = await runPine({ code, symbol, interval, inputs: { ...base, ...inputs }, barsIn: bars });
+      if (!res.strategy) throw new Error('скрипт не вернул сделок strategy()');
+      capital = capital || res.strategy.initial_capital || 0; title = title || res.title;
+      cells.push({ inputs, trades: res.strategy.closedtrades.filter(t => t.exit_time).map(t => ({ et: t.entry_time, xt: t.exit_time, size: t.size, ep: t.entry_price, xp: t.exit_price, profit: t.profit })) });
+    } catch (e) { cells.push({ inputs, trades: [], error: String(e.message || e).slice(0, 200) }); }
+    job.done = i + 1;
+    if (job.onProgress && (i % 3 === 0 || i === job.total - 1)) job.onProgress(job);
+  }
+  if (cells.every(c => c.error)) throw new Error(`Скрипт падает на всех наборах: ${cells[0].error}`);
+  const spreadBy = new Map(); for (const b of bars) if (b.spread > 0) spreadBy.set(Math.floor(b.openTime / 1000), b.spread);
+  const c = spec.costs || {};
+  const usePerBar = (c.spread === null || c.spread === undefined || c.spread === '') && spreadBy.size > bars.length * 0.5;
+  const costs = { spread: usePerBar ? medianOf([...spreadBy.values()]) : Math.max(0, Number(c.spread) || 0), slip: Math.max(0, Number(c.slip) || 0), commPct: Math.max(0, Number(c.commPct) || 0),
+    spreadAt: usePerBar ? t => spreadBy.get(t) : null, source: usePerBar ? 'спред брокера по барам' : 'заданы вручную' };
+  const days = [...new Set(bars.map(b => Math.floor(b.openTime / 86400000)))];
+  const all = loadTrials(), key = trialsKey(code, symbol, interval), prev = all[key] || { trials: 0, runs: [] };
+  const report = buildReport({ axes: spec.axes, cells, costs, trialsBefore: prev.trials, minTrades: 10,
+    bars: { from: Math.floor(bars[0].openTime / 1000), to: Math.floor(bars[bars.length - 1].closeTime / 1000), days, ann: annFor(src), capital: capital || 10000, count: bars.length } });
+  report.meta = { title: title || pineTitle(code), symbol, interval, src, broker: src === 'mt5' ? (MT5.info?.server || '') : src, baseInputs: base, prevTrials: prev.trials, ms: Date.now() - job.startedAt, at: new Date().toISOString() };
+  prev.trials += job.total; prev.runs = [...(prev.runs || []), { at: report.meta.at, cells: job.total, verdict: report.verdict.code }].slice(-50);
+  all[key] = prev; try { fs.writeFileSync(VAL_TRIALS_FILE, JSON.stringify(all, null, 1)); } catch { /* read-only — counter stays in memory for this run */ }
+  job.report = report; job.state = 'done'; job.onProgress && job.onProgress(job);
+}
+const jobView = j => ({ id: j.id, state: j.state, done: j.done, total: j.total, error: j.error, elapsed: Date.now() - j.startedAt, report: j.state === 'done' ? j.report : undefined });
+// short text for Panda: the region, not the maximum
+function summarizeValidation(rep) {
+  const f = (x, d = 2) => (Number.isFinite(x) ? x.toFixed(d) : '—'), L = [];
+  L.push(`VERDICT: ${rep.verdict.title}`);
+  L.push(`data: ${rep.meta.symbol} ${rep.meta.interval}, ${rep.bars.count} bars ${new Date(rep.bars.from * 1000).toISOString().slice(0, 10)}…${new Date(rep.bars.to * 1000).toISOString().slice(0, 10)}; costs: ${rep.costs.source}, spread ${f(rep.costs.spread, 4)}, slip ${f(rep.costs.slip, 4)}/side, comm ${f(rep.costs.commPct, 3)}%/side`);
+  L.push(`grid: ${rep.grid.axes.map(a => `${a.label}=[${a.values.join(',')}]`).join(' × ')} = ${rep.grid.total} runs; trials counted for deflation: ${rep.trials} (incl. ${rep.meta.prevTrials} earlier)`);
+  if (rep.region) {
+    const R = rep.region, C = rep.center;
+    L.push(`region: ${R.size} cells${R.edge ? ' (touches grid edge — widen it)' : ''}, mean Sharpe ${f(R.mean)} ± ${f(R.se)}; profitable ${(R.profitableShare * 100).toFixed(0)}% of region, ${(R.gridProfitableShare * 100).toFixed(0)}% of grid`);
+    L.push(`centre set (to forward-test, NOT the max): ${JSON.stringify(R.center)} → trades ${C.n}, net ${f(C.net)}, PF ${f(C.pf)}, win ${f(C.win * 100, 0)}%, maxDD ${f(C.dd)}, Sharpe ${f(C.sharpe)}`);
+    L.push(`deflated Sharpe: ${f(rep.dsr.S)} − noise ceiling ${f(rep.dsr.sr0)} = ${f(rep.dsr.deflated)} (p ${f(rep.dsr.prob * 100, 0)}%)`);
+    L.push(`walk-forward: OOS Sharpe ${f(rep.wf.oosSharpe)}, WFE ${f(rep.wf.wfe)}, positive folds ${rep.wf.posFolds}/${rep.wf.n}`);
+    if (rep.mc) L.push(`Monte Carlo: P(loss) ${f(rep.mc.pLoss * 100, 1)}%, DD95 ${f(rep.mc.dd95)}; edge dies at costs ×${f(rep.costs.deathMult)}`);
+  }
+  L.push('gates:'); for (const g of rep.gates) L.push(`  [${g.status}] ${g.label}: ${g.value}${g.note ? ' — ' + g.note : ''}`);
+  L.push('Report this honestly: quote the region mean ± SE and the verdict, never the best cell. The full report is shown to the user in the app.');
+  return L.join('\n');
+}
+
 // ───────────────────────── LIBRARY (built-in scripts) + TEMPLATES + LAYOUTS ─────────────────────────
 function listLibrary() {
   let files = [];
@@ -782,8 +876,8 @@ async function runPine(args) {
     finally { Object.assign(console, orig); }
   });
 }
-async function runPineRaw({ code, symbol, interval, limit, inputs, until, fresh }) {
-  let bars = await getBars(symbol, interval, limit, !!fresh);
+async function runPineRaw({ code, symbol, interval, limit, inputs, until, fresh, barsIn }) {
+  let bars = barsIn || await getBars(symbol, interval, limit, !!fresh);
   const untilMs = Number(until) > 0 ? Number(until) * 1000 : 0; // replay cursor (unix sec of the last revealed bar)
   if (untilMs) { bars = bars.filter(b => b.openTime <= untilMs); if (bars.length < 2) throw new Error('replay: слишком мало баров до курсора'); }
   const t0 = Date.now();
@@ -1000,7 +1094,7 @@ async function agentTurnClaudeCode(body, emit) {
   const MODES = {
     look: 'chart analysis (run `node ql.mjs context` first; look at the attached chart image if any)',
     build: 'build an indicator',
-    test: 'build and backtest a strategy() — report the stats and say honestly whether the result looks robust or curve-fitted (sample size, costs, parameter sensitivity)',
+    test: 'build a strategy(), run it, then validate it with `node ql.mjs validate` over its main inputs — answer with the verdict and the region mean ± SE, never the best grid cell',
     alert: 'build an alert: alert()/alertcondition() on bar close; then tell the user to turn it on in the Watch panel (bell icon) to get Telegram/browser notifications',
     code: 'fix / convert / explain the given Pine code',
     pic: 'rebuild what is shown on the attached image as Pine',
@@ -1572,6 +1666,7 @@ const STATIC = {
   '/watch.js': ['public/watch.js', 'text/javascript; charset=utf-8'],
   '/library.js': ['public/library.js', 'text/javascript; charset=utf-8'],
   '/settings.js': ['public/settings.js', 'text/javascript; charset=utf-8'],
+  '/validate.js': ['public/validate.js', 'text/javascript; charset=utf-8'],
   '/i18n.js': ['public/i18n.js', 'text/javascript; charset=utf-8'],
   '/i18n-dict.js': ['public/i18n-dict.js', 'text/javascript; charset=utf-8'],
   '/style.css': ['public/style.css', 'text/css; charset=utf-8'],
@@ -1673,6 +1768,23 @@ const server = http.createServer(async (req, res) => {
           symbols: [...MT5.symbols.values()].map(s => ({ name: s.name, desc: s.desc, path: s.path || '' })) },
         crypto: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'PAXGUSDT'],
       });
+    }
+    if (req.method === 'GET' && url.pathname === '/api/validate/defaults') {
+      try { return sendJSON(res, 200, { ok: true, ...(await validationDefaults(String(url.searchParams.get('symbol') || '').toUpperCase(), url.searchParams.get('interval'), String(url.searchParams.get('title') || ''))) }); }
+      catch (e) { return sendJSON(res, 200, { ok: false, error: e.message }); }
+    }
+    if (req.method === 'POST' && url.pathname === '/api/validate') {
+      if (!localOrigin(req)) return sendJSON(res, 403, { error: 'forbidden origin' });
+      try { const j = startValidation(await readBody(req)); return sendJSON(res, 200, { ok: true, ...jobView(j) }); }
+      catch (e) { return sendJSON(res, 200, { ok: false, error: e.message }); }
+    }
+    if (req.method === 'GET' && url.pathname.startsWith('/api/validate/job/')) {
+      const j = VJOBS.get(url.pathname.slice(18)); if (!j) return sendJSON(res, 200, { ok: false, error: 'нет такой проверки (сервер перезапускался?)' });
+      return sendJSON(res, 200, { ok: true, ...jobView(j) });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/validate/cancel') {
+      const j = VJOBS.get(String((await readBody(req)).id || '')); if (j && j.state === 'running') j.cancel = true;
+      return sendJSON(res, 200, { ok: true });
     }
     if (req.method === 'POST' && url.pathname === '/api/run') {
       const b = await readBody(req);
@@ -1821,6 +1933,46 @@ const server = http.createServer(async (req, res) => {
         if (st.emit) st.emit({ type: 'run', ok: false, code, summary: `ERROR: ${msg}` });
         return sendJSON(res, 200, { ok: false, error: msg });
       }
+    }
+    // Panda: `node ql.mjs validate --file spec.json` — honest grid validation of a strategy on the chat's chart
+    if (req.method === 'POST' && url.pathname === '/api/agent/validate') {
+      const b = await readBody(req); const st = liveFor(b.sid);
+      if (!st || !st.chart) return sendJSON(res, 200, { ok: false, error: 'no active chat session' });
+      const sp = b.spec || {};
+      const code = String(sp.code || (st.lastGood && st.lastGood.code) || '');
+      try {
+        let meta = [];
+        try { meta = new Indicator(code).getInputsMeta(); } catch (e) { throw new Error(`compile: ${e.message}`); }
+        // axes may name an input by its title or variable name; values or "from:to:step"
+        const axes = (sp.axes || []).map(a => {
+          const m = meta.find(x => x.varId === a.key || x.title === a.key || x.name === a.key || x.title === a.input || x.varId === a.input);
+          if (!m) throw new Error(`no input "${a.key || a.input}". Inputs: ${meta.map(x => `${x.title || x.name} (${x.varId}, ${x.type})`).join('; ')}`);
+          let values = a.values;
+          if (!Array.isArray(values) && a.range) { const [f, t, s] = String(a.range).split(':').map(Number); values = []; for (let v = f; s > 0 && v <= t + s * 1e-9 && values.length < 60; v += s) values.push(+v.toFixed(10)); }
+          if (!Array.isArray(values) || !values.length) throw new Error(`axis "${a.key}": give values [..] or range "from:to:step"`);
+          return { key: m.varId || m.id || m.title, label: m.title || m.name, values: m.type === 'int' ? values.map(v => Math.round(v)) : values };
+        });
+        const d = await validationDefaults(st.chart.symbol, st.chart.interval);
+        const costs = { ...d.suggest, ...(sp.costs || {}) };
+        if (st.emit) st.emit({ type: 'status', text: `Проверяю стратегию: ${axes.reduce((p, a) => p * a.values.length, 1)} прогонов…` });
+        const job = startValidation({ code, symbol: st.chart.symbol, interval: st.chart.interval, bars: sp.bars || Math.min(d.maxBars, 10000), axes, costs, baseInputs: sp.baseInputs || {} },
+          j => { if (st.emit && j.state === 'running') st.emit({ type: 'status', text: `Проверяю стратегию: ${j.done}/${j.total}…` }); });
+        const t0 = Date.now();
+        while (job.state === 'running' && Date.now() - t0 < 100000) await new Promise(r => setTimeout(r, 400));
+        if (job.state === 'running') return sendJSON(res, 200, { ok: true, summary: `STILL RUNNING (${job.done}/${job.total}). Call: node ql.mjs validate-status ${job.id}` });
+        if (job.state !== 'done') return sendJSON(res, 200, { ok: false, error: job.error || job.state });
+        if (st.emit) st.emit({ type: 'validation', job: job.id, report: job.report, code });
+        return sendJSON(res, 200, { ok: true, summary: summarizeValidation(job.report) });
+      } catch (e) { return sendJSON(res, 200, { ok: false, error: e.message }); }
+    }
+    if (req.method === 'POST' && url.pathname === '/api/agent/validate-status') {
+      const b = await readBody(req); const st = liveFor(b.sid); const j = VJOBS.get(String(b.id || ''));
+      if (!j) return sendJSON(res, 200, { ok: false, error: 'unknown job id' });
+      const t0 = Date.now(); while (j.state === 'running' && Date.now() - t0 < 100000) await new Promise(r => setTimeout(r, 400));
+      if (j.state === 'running') return sendJSON(res, 200, { ok: true, summary: `STILL RUNNING (${j.done}/${j.total}). Call validate-status again.` });
+      if (j.state !== 'done') return sendJSON(res, 200, { ok: false, error: j.error || j.state });
+      if (st && st.emit) st.emit({ type: 'validation', job: j.id, report: j.report });
+      return sendJSON(res, 200, { ok: true, summary: summarizeValidation(j.report) });
     }
     if (req.method === 'POST' && url.pathname === '/api/agent/context') {
       const b = await readBody(req); const st = liveFor(b.sid);

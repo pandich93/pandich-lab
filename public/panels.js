@@ -347,11 +347,12 @@ function renderStrategy() {
   const winrate = st.total ? (st.wintrades / st.total * 100) : null;
   const cell = (k, v, cls = '') => `<div class="stat"><div class="k">${k}</div><div class="v ${cls}">${v}</div></div>`;
   const tf = t => new Date(t * 1000).toISOString().slice(0, 16).replace('T', ' ');
-  el.innerHTML = `<div class="muted" style="margin:6px 0">${esc(s.name)} · ${esc(S.symbol)} ${S.interval} · движок PineTS (OHLC, без bar magnifier)</div><div class="stats">` +
+  el.innerHTML = `<div class="ep-valrow"><span class="muted">${esc(s.name)} · ${esc(S.symbol)} ${S.interval} · движок PineTS (OHLC, без bar magnifier)</span>${window.QLValidate ? '<button class="btn ep-val" id="epVal" title="Сетка параметров, регион, поправка на перебор, walk-forward, Монте-Карло">✓ Проверить честно</button>' : ''}</div><div class="ep-valnote muted">Один прогон — шумная оценка. «Проверить честно» покажет, есть ли перевес на самом деле.</div><div class="stats">` +
     cell('Net profit', fmt(st.netprofit), st.netprofit >= 0 ? 'pos' : 'neg') + cell('Сделок', st.total) + cell('Win rate', winrate === null ? '—' : fmt(winrate, 1) + '%') +
     cell('Profit factor', fmt(st.profit_factor)) + cell('Max DD', fmt(st.max_drawdown)) + cell('Max DD %', fmt(st.max_drawdown_percent)) + cell('Gross +', fmt(st.grossprofit)) + cell('Gross −', fmt(st.grossloss)) +
     `</div><table class="trades"><tr><th>#</th><th>Вход</th><th>Цена</th><th>Выход</th><th>Цена</th><th>Объём</th><th>P/L</th></tr>` +
     st.closedtrades.slice(-300).reverse().map((t, k) => `<tr><td>${st.closedtrades.length - k}</td><td>${tf(t.entry_time)}</td><td>${fmt(t.entry_price, 4)}</td><td>${t.exit_time ? tf(t.exit_time) : ''}</td><td>${fmt(t.exit_price, 4)}</td><td>${fmt(t.size, 4)}</td><td class="${t.profit >= 0 ? 'pos' : 'neg'}">${fmt(t.profit)}</td></tr>`).join('') + '</table>';
+  const vb = $('epVal'); if (vb) vb.onclick = () => window.QLValidate.openSetup(s);
 }
 
 // Pine language for Monaco (highlighting + completions from PineTS metadata)

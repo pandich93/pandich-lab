@@ -127,6 +127,7 @@ def handle(req):
         return ok(i, {
             "t": r["time"].tolist(), "o": r["open"].tolist(), "h": r["high"].tolist(), "l": r["low"].tolist(),
             "c": r["close"].tolist(), "tv": r["tick_volume"].tolist(), "rv": r["real_volume"].tolist(),
+            "sp": r["spread"].tolist(), "pt": mt5.symbol_info(sym).point,  # spread in points (Bid chart) → validation costs
         })
     return err(i, "unknown cmd %s" % cmd)
 
