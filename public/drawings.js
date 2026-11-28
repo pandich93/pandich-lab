@@ -765,6 +765,7 @@ function drawingMenu(d) {
     { icon: MI.gear, label: 'Настройки…', hint: '2× клик', run: () => openSettings(d) },
     ...(LEVELED.has(d.type) ? [{ icon: '≡', label: 'Уровни Фибоначчи…', run: () => openSettings(d, 'levels') }] : []),
     { icon: '⌖', label: 'Координаты…', run: () => openSettings(d, 'coords') },
+    ...((d.type === 'hline' || d.type === 'hray') && window.QLAlerts && d.pts && d.pts[0] ? [{ icon: '🔔', label: 'Алерт на этой линии', run: () => window.QLAlerts.create(d.pts[0].p) }] : []),
     '-',
     { icon: MI.clone, label: 'Клонировать', run: () => cloneDrawing(d) },
     { icon: MI.lock, label: d.locked ? 'Разблокировать' : 'Заблокировать', run: () => { snapshot(); d.locked = !d.locked; save(); renderProps(); requestDraw(); } },
@@ -781,6 +782,7 @@ function chartMenu(pt) {
   if (pt) {
     const pr = fmtP(pt.p);
     items.push({ icon: MI.clone, label: `Копировать цену ${pr}`, run: () => copyText(pr) });
+    if (window.QLAlerts) items.push({ icon: '🔔', label: `Алерт на цене ${pr}`, run: () => window.QLAlerts.create(pt.p) });
     items.push({ icon: '—', label: `Горизонтальная линия на ${pr}`, run: () => { snapshot(); const d = newDrawing('hline', { t: pt.t, p: pt.p }); D.items.push(d); D.selected = d; save(); renderProps(); requestDraw(); } });
     if (window.QLReplay && !A.EMBED) items.push({ icon: '▶', label: 'Replay с этого бара', run: () => {
       const l = Math.round(t2l(pt.t) ?? -1), n = bars().length;

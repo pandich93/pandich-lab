@@ -63,8 +63,8 @@ function cardHTML(w) {
   </div>`;
 }
 function evHTML(e) {
-  return `<div class="wt-ev"><div class="wt-row"><b>${esc(e.name)}</b><span class="muted">${esc(e.symbol)} · ${esc(e.interval)}</span><div class="spacer"></div><span class="muted">${ago(e.t)}</span></div>
-    <div class="wt-meta">${e.test ? '<span class="wt-tag">тест</span> ' : ''}бар ${ft(e.barTime)} · ${A.fmt(e.close, e.close >= 1000 ? 2 : e.close >= 10 ? 3 : 5)}</div>
+  return `<div class="wt-ev"><div class="wt-row"><b>${esc(e.name)}</b><span class="muted">${esc(e.symbol)}${e.interval ? ' · ' + esc(e.interval) : ''}</span><div class="spacer"></div><span class="muted">${ago(e.t)}</span></div>
+    <div class="wt-meta">${e.test ? '<span class="wt-tag">тест</span> ' : ''}${e.kind === 'price' ? ft(Math.floor(e.t / 1000)) : 'бар ' + ft(e.barTime)} · ${A.fmt(e.close, e.close >= 1000 ? 2 : e.close >= 10 ? 3 : 5)}</div>
     ${(e.hits || []).map(h => `<div class="wt-hit">• ${esc(h.text)}</div>`).join('') || '<div class="wt-meta muted">сигналов на баре нет</div>'}
     ${e.telegram && e.telegram !== 'ok' ? `<div class="wt-meta err">Telegram: ${esc(e.telegram)}</div>` : ''}</div>`;
 }
@@ -163,9 +163,9 @@ function beep() {
 function toast(ev) {
   let host = document.querySelector('.wt-toasts'); if (!host) { host = document.createElement('div'); host.className = 'wt-toasts'; document.body.appendChild(host); }
   const d = document.createElement('div'); d.className = 'wt-toast';
-  d.innerHTML = `<div class="wt-row"><b>🔔 ${esc(ev.name)}</b><div class="spacer"></div><button>✕</button></div><div class="wt-meta">${esc(ev.symbol)} · ${esc(ev.interval)} · бар ${ft(ev.barTime)}</div>${(ev.hits || []).slice(0, 4).map(h => `<div class="wt-hit">• ${esc(h.text)}</div>`).join('')}`;
+  d.innerHTML = `<div class="wt-row"><b>🔔 ${esc(ev.name)}</b><div class="spacer"></div><button>✕</button></div><div class="wt-meta">${esc(ev.symbol)}${ev.interval ? ' · ' + esc(ev.interval) + ' · бар ' + ft(ev.barTime) : ' · ' + ft(Math.floor(ev.t / 1000))}</div>${(ev.hits || []).slice(0, 4).map(h => `<div class="wt-hit">• ${esc(h.text)}</div>`).join('')}`;
   d.querySelector('button').onclick = () => d.remove();
-  d.addEventListener('click', e => { if (e.target.tagName !== 'BUTTON') { A.setChart(ev.symbol, ev.interval); d.remove(); } });
+  d.addEventListener('click', e => { if (e.target.tagName !== 'BUTTON') { A.setChart(ev.symbol, ev.interval || A.S.interval); d.remove(); } });
   host.prepend(d); setTimeout(() => d.remove(), 30000);
 }
 setInterval(async () => {
@@ -176,9 +176,10 @@ setInterval(async () => {
   for (const ev of r.events) {
     if (muted.includes(ev.watchId)) continue;
     toast(ev); beep();
-    try { if ('Notification' in window && Notification.permission === 'granted') new Notification(`🔔 ${ev.name} · ${ev.symbol} ${ev.interval}`, { body: (ev.hits || []).map(h => h.text).join('\n') || 'сигнал', tag: ev.id }); } catch { /* blocked */ }
+    try { if ('Notification' in window && Notification.permission === 'granted') new Notification(`🔔 ${ev.name} · ${ev.symbol}${ev.interval ? ' ' + ev.interval : ''}`, { body: (ev.hits || []).map(h => h.text).join('\n') || 'сигнал', tag: ev.id }); } catch { /* blocked */ }
   }
   if (r.events.length && body && body.isConnected && !form) refresh();
+  if (r.events.some(e => e.kind === 'price')) window.dispatchEvent(new CustomEvent('ql:alerts'));
 }, 5000);
 
 window.QLWatch = { refresh, mount };

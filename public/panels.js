@@ -13,6 +13,7 @@ const SV = (b) => `<svg viewBox="0 0 18 18" width="17" height="17" fill="none" s
 const IC = {
   bell: SV('<path d="M5 13V8.5a4 4 0 018 0V13l1.5 1.5h-11zM7.5 15.5a1.6 1.6 0 003 0"/>'),
   editor: SV('<path d="M6 5L2 9l4 4M12 5l4 4-4 4"/>'),
+  list: SV('<path d="M6 4.5h9M6 9h9M6 13.5h9"/><circle cx="3" cy="4.5" r=".8" fill="currentColor"/><circle cx="3" cy="9" r=".8" fill="currentColor"/><circle cx="3" cy="13.5" r=".8" fill="currentColor"/>'),
   tree: SV('<path d="M9 2l7 4-7 4-7-4z"/><path d="M2 9.5l7 4 7-4M2 13l7 4 7-4"/>'),
   data: SV('<path d="M3 3l5 11 1.6-4.4L14 8z"/><path d="M12 13h4M12 16h4M14 10.5h2"/>'),
   run: '<svg viewBox="0 0 12 12" width="11" height="11"><path d="M3 2l7 4-7 4z" fill="currentColor"/></svg>',
@@ -32,6 +33,7 @@ const IC = {
   chev: '<svg viewBox="0 0 10 10" width="9" height="9"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>',
 };
 const PANELS = [
+  { id: 'wl', title: 'Список и алерты', icon: IC.list, width: 320 },
   { id: 'editor', title: 'Pine-редактор', icon: IC.editor, width: 560 },
   { id: 'tree', title: 'Дерево объектов', icon: IC.tree, width: 300 },
   { id: 'data', title: 'Окно данных', icon: IC.data, width: 280 },

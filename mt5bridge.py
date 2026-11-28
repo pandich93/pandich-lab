@@ -107,6 +107,17 @@ def handle(req):
         hits.sort(key=lambda x: (-x[0], not x[1].visible, x[1].name))
         return ok(i, [{"name": s.name, "desc": s.description, "path": s.path, "digits": s.digits,
                        "visible": bool(s.visible), "score": round(sc, 1)} for sc, s in hits[:lim]])
+    if cmd == "ticks":
+        # last bid/ask for several symbols at once (watchlist, price alerts); unknown names are skipped
+        out = []
+        for name in (req.get("symbols") or [])[:60]:
+            if mt5.symbol_info(name) is None:
+                continue
+            mt5.symbol_select(name, True)
+            t = mt5.symbol_info_tick(name)
+            if t is not None and (t.bid or t.last):
+                out.append({"name": name, "bid": t.bid, "ask": t.ask, "last": t.last, "time": t.time})
+        return ok(i, out)
     if cmd == "info":
         s = mt5.symbol_info(req["symbol"])
         if s is None:

@@ -582,6 +582,85 @@ async function watchTick() {
 setInterval(watchTick, 5000);
 
 
+// ───────────────────────── QUOTES (watchlist) + PRICE ALERTS ─────────────────────────
+const QCACHE = new Map(); // symbol → { t, q }
+const realMT5 = sym => MT5.symbols.get(sym)?.name || MT5.alias.get(sym) || sym;
+// last price + change vs the previous daily close; one MT5 call / one Binance call for all symbols
+async function getQuotes(symbols, maxAgeMs = 2500) {
+  const want = [...new Set(symbols.map(x => String(x || '').toUpperCase().trim()).filter(Boolean))].slice(0, 60);
+  const out = {}, need = [];
+  for (const s of want) { const c = QCACHE.get(s); if (c && Date.now() - c.t < maxAgeMs) out[s] = c.q; else need.push(s); }
+  const bySrc = { mt5: [], binance: [], mock: [] };
+  for (const s of need) bySrc[sourceFor(s)].push(s);
+  const last = {};
+  if (bySrc.mt5.length) {
+    try {
+      if (!MT5.ready) await startMT5();
+      const map = new Map(bySrc.mt5.map(s => [realMT5(s), s]));
+      for (const t of await mt5Call('ticks', { symbols: [...map.keys()] }, 10000)) last[map.get(t.name)] = { price: t.bid || t.last, bid: t.bid, ask: t.ask, t: t.time };
+    } catch (e) { for (const s of bySrc.mt5) out[s] = { symbol: s, src: 'mt5', error: e.message }; }
+  }
+  if (bySrc.binance.length) {
+    try {
+      const r = await fetch(`https://data-api.binance.vision/api/v3/ticker/price?symbols=${encodeURIComponent(JSON.stringify(bySrc.binance))}`, { signal: AbortSignal.timeout(8000) });
+      if (r.ok) for (const x of await r.json()) last[x.symbol] = { price: +x.price };
+    } catch { /* fall back to bars below */ }
+  }
+  await Promise.all(need.map(async s => {
+    if (out[s]) return;
+    try {
+      const d = await getBars(s, '1d', 50); // previous daily close (cached ~30 s)
+      const n = d.length, l = last[s] || { price: d[n - 1].close };
+      const prev = n > 1 ? d[n - 2].close : d[n - 1].open;
+      const q = { symbol: s, src: d.src || sourceFor(s), price: l.price, bid: l.bid, ask: l.ask, prevClose: prev, chg: l.price - prev, chgPct: prev ? (l.price / prev - 1) * 100 : 0, digits: digitsFor(s, l.price), t: Date.now() };
+      QCACHE.set(s, { t: Date.now(), q }); out[s] = q;
+    } catch (e) { out[s] = { symbol: s, error: e.message }; }
+  }));
+  return want.map(s => out[s]);
+}
+
+const ALERTS_FILE = path.join(DATA_DIR, 'alerts.json');
+const AL = { list: [], busy: false };
+try { AL.list = JSON.parse(fs.readFileSync(ALERTS_FILE, 'utf8')); } catch { /* none yet */ }
+const saveAlerts = () => { try { fs.writeFileSync(ALERTS_FILE, JSON.stringify(AL.list, null, 1)); } catch (e) { console.log(`alerts: cannot save: ${e.message}`); } };
+const COND_TXT = { above: 'выше', below: 'ниже', cross: 'пересекает', cross_up: 'пересекает вверх', cross_down: 'пересекает вниз' };
+// fires on the transition only: the alert remembers on which side of the level the price was
+function alertHit(a, price) {
+  const side = price >= a.price ? 1 : -1, prev = a.side;
+  a.side = side;
+  if (prev === undefined || prev === null) return false; // first look after create/enable: just remember the side
+  if (prev === side) return false;
+  if (a.cond === 'above' || a.cond === 'cross_up') return side > 0;
+  if (a.cond === 'below' || a.cond === 'cross_down') return side < 0;
+  return true; // cross: either direction
+}
+async function alertsTick() {
+  const act = AL.list.filter(a => a.enabled);
+  if (!act.length || AL.busy) return; AL.busy = true;
+  try {
+    const qs = await getQuotes(act.map(a => a.symbol), 2000);
+    const q = Object.fromEntries(qs.filter(Boolean).map(x => [x.symbol, x]));
+    let dirty = false;
+    for (const a of act) {
+      const x = q[a.symbol]; if (!x || x.error || !Number.isFinite(x.price)) continue;
+      const before = a.side, hit = alertHit(a, x.price);
+      if (a.side !== before) dirty = true;
+      a.lastPrice = x.price; a.lastCheck = Date.now();
+      if (!hit) continue;
+      if (a.firedAt && Date.now() - a.firedAt < 60000) continue; // one per minute at most (price chatter around the level)
+      a.firedAt = Date.now(); a.fired = (a.fired || 0) + 1; if (a.once) a.enabled = false; dirty = true;
+      const d = digitsFor(a.symbol, x.price), dir = x.price >= a.price ? '↑' : '↓';
+      const text = `${a.symbol} ${COND_TXT[a.cond] || a.cond} ${Number(a.price).toFixed(d)} ${dir} · цена ${Number(x.price).toFixed(d)}${a.note ? ' — ' + a.note : ''}`;
+      const ev = { id: 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), t: Date.now(), kind: 'price', alertId: a.id, name: 'Алерт цены', symbol: a.symbol, interval: '', close: x.price, hits: [{ kind: 'price', text }], test: false, telegram: null };
+      if (a.telegram !== false && tg().token && tg().chatId) { try { await tgSend(`🔔 <b>Алерт цены</b>\n${htmlEsc(text)}\n<i>Pandich Lab</i>`); ev.telegram = 'ok'; } catch (e) { ev.telegram = e.message; } }
+      recordEvent(ev); console.log(`alert: ${text}`);
+    }
+    if (dirty) saveAlerts();
+  } catch (e) { console.log(`alerts: ${e.message}`); }
+  finally { AL.busy = false; }
+}
+setInterval(alertsTick, 3000);
+
 // ───────────────────────── STRATEGY VALIDATION (grid → region → deflated Sharpe → walk-forward → Monte Carlo → verdict) ─────────────────────────
 const VAL_MAX_CELLS = 400, VAL_MAX_BARS = 20000, VAL_TRIALS_FILE = path.join(DATA_DIR, 'validate_trials.json');
 const VJOBS = new Map(); let vjobSeq = 0;
@@ -1683,6 +1762,7 @@ const STATIC = {
   '/library.js': ['public/library.js', 'text/javascript; charset=utf-8'],
   '/settings.js': ['public/settings.js', 'text/javascript; charset=utf-8'],
   '/validate.js': ['public/validate.js', 'text/javascript; charset=utf-8'],
+  '/watchlist.js': ['public/watchlist.js', 'text/javascript; charset=utf-8'],
   '/i18n.js': ['public/i18n.js', 'text/javascript; charset=utf-8'],
   '/i18n-dict.js': ['public/i18n-dict.js', 'text/javascript; charset=utf-8'],
   '/style.css': ['public/style.css', 'text/css; charset=utf-8'],
@@ -1784,6 +1864,27 @@ const server = http.createServer(async (req, res) => {
           symbols: [...MT5.symbols.values()].map(s => ({ name: s.name, desc: s.desc, path: s.path || '' })) },
         crypto: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'PAXGUSDT'],
       });
+    }
+    if (req.method === 'GET' && url.pathname === '/api/quotes') {
+      try { return sendJSON(res, 200, { ok: true, quotes: await getQuotes(String(url.searchParams.get('symbols') || '').split(',')) }); }
+      catch (e) { return sendJSON(res, 200, { ok: false, error: e.message }); }
+    }
+    if (req.method === 'GET' && url.pathname === '/api/alerts') return sendJSON(res, 200, { ok: true, alerts: AL.list, telegram: !!(tg().token && tg().chatId) });
+    if (req.method === 'POST' && url.pathname.startsWith('/api/alerts/')) {
+      if (!localOrigin(req)) return sendJSON(res, 403, { error: 'forbidden origin' });
+      const b = await readBody(req), act = url.pathname.slice(12), a = AL.list.find(x => x.id === b.id);
+      if (act === 'save') {
+        const price = Number(b.price), symbol = String(b.symbol || '').toUpperCase().trim(), cond = COND_TXT[b.cond] ? b.cond : 'cross';
+        if (!symbol || !Number.isFinite(price)) return sendJSON(res, 200, { ok: false, error: 'нужны символ и цена' });
+        const it = a || { id: 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), created: Date.now(), fired: 0 };
+        Object.assign(it, { symbol, cond, price, note: String(b.note || '').slice(0, 200), once: b.once !== false, telegram: b.telegram !== false, enabled: true, side: null, firedAt: 0 });
+        if (!a) AL.list.push(it);
+        saveAlerts(); return sendJSON(res, 200, { ok: true, alert: it });
+      }
+      if (!a) return sendJSON(res, 200, { ok: false, error: 'нет такого алерта' });
+      if (act === 'delete') { AL.list = AL.list.filter(x => x !== a); saveAlerts(); return sendJSON(res, 200, { ok: true }); }
+      if (act === 'toggle') { a.enabled = !a.enabled; a.side = null; saveAlerts(); return sendJSON(res, 200, { ok: true, alert: a }); }
+      return sendJSON(res, 404, { error: 'unknown action' });
     }
     if (req.method === 'GET' && url.pathname === '/api/validate/defaults') {
       try { return sendJSON(res, 200, { ok: true, ...(await validationDefaults(String(url.searchParams.get('symbol') || '').toUpperCase(), url.searchParams.get('interval'), String(url.searchParams.get('title') || ''))) }); }
