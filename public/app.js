@@ -532,37 +532,144 @@ function selectScript(id) {
 }
 
 // ───────── inputs dialog ─────────
+// ───────── indicator settings (TradingView-style): groups, inline rows, tooltips, colour + opacity, live preview ─────────
+const SWATCHES = ['#F23645', '#FF9800', '#FFEB3B', '#4CAF50', '#089981', '#00BCD4', '#2962FF', '#673AB7', '#9C27B0', '#E91E63', '#FFFFFF', '#B2B5BE', '#787B86', '#434651', '#131722'];
+const colHex = v => { const m = String(v || '').trim().match(/^#?([0-9a-f]{6})([0-9a-f]{2})?$/i); return m ? { rgb: '#' + m[1].toUpperCase(), a: m[2] ? parseInt(m[2], 16) : 255 } : { rgb: '#2962FF', a: 255 }; };
+const colStr = (rgb, a) => (rgb.toUpperCase() + (a >= 255 ? 'FF' : Math.max(0, Math.round(a)).toString(16).padStart(2, '0').toUpperCase()));
+const sameVal = (m, a, b) => m.type === 'color' ? colStr(colHex(a).rgb, colHex(a).a) === colStr(colHex(b).rgb, colHex(b).a) : String(a) === String(b);
+let indDlg = null;
 function openInputs(s) {
   const meta = (s.result && s.result.inputsMeta) || [];
-  const box = $('modalBox');
-  if (!meta.length) { box.innerHTML = `<h3>${esc(s.name)}</h3><p class="muted">У скрипта нет input.* параметров.</p><div class="modal-actions"><button class="btn" id="mClose">Закрыть</button></div>`; }
-  else {
-    box.innerHTML = `<h3>${esc(s.name)} — настройки</h3>` + meta.map((m, k) => {
-      const key = m.title || m.name; const cur = (s.inputs && key in s.inputs) ? s.inputs[key] : m.defval;
-      let ctl;
-      if (m.type === 'bool') ctl = `<input type="checkbox" data-k="${k}" ${cur ? 'checked' : ''}>`;
-      else if (m.options && m.options.length) ctl = `<select data-k="${k}">${m.options.map(o => `<option ${String(o) === String(cur) ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
-      else if (m.type === 'int' || m.type === 'float' || m.type === 'price') ctl = `<input type="number" data-k="${k}" value="${esc(cur)}" step="${m.step || (m.type === 'int' ? 1 : 'any')}" ${m.minval !== undefined ? `min="${m.minval}"` : ''} ${m.maxval !== undefined ? `max="${m.maxval}"` : ''}>`;
-      else if (m.type === 'color') ctl = `<input type="color" data-k="${k}" value="${esc(String(cur || '#2962ff').slice(0, 7))}">`;
-      else ctl = `<input type="text" data-k="${k}" value="${esc(cur ?? '')}">`;
-      return `<div class="field"><label>${esc(key)}</label>${ctl}</div>`;
-    }).join('') + `<div class="modal-actions"><button class="btn" id="mReset">По умолчанию</button><button class="btn" id="mClose">Отмена</button><button class="btn" id="mOk">Применить</button></div>`;
-  }
-  $('modal').classList.remove('hidden');
-  const close = () => $('modal').classList.add('hidden');
-  $('mClose').onclick = close;
-  const ok = $('mOk'), rs = $('mReset');
-  if (rs) rs.onclick = async () => { s.inputs = {}; saveScripts(); close(); await runScript(s); renderAll(); };
-  if (ok) ok.onclick = async () => {
-    const inputs = {};
-    box.querySelectorAll('[data-k]').forEach(el => {
-      const m = meta[+el.dataset.k]; const key = m.title || m.name;
-      let v = el.type === 'checkbox' ? el.checked : el.value;
-      if (m.type === 'int') v = parseInt(v, 10); else if (m.type === 'float' || m.type === 'price') v = parseFloat(v);
-      if (v !== m.defval) inputs[key] = v;
-    });
-    s.inputs = inputs; saveScripts(); close(); await runScript(s); renderAll();
+  if (indDlg) indDlg.close(false);
+  const before = JSON.parse(JSON.stringify(s.inputs || {}));
+  // key = Pine variable name (unique even when titles repeat or are empty); old saves keyed by title still load
+  const keyOf = m => m.varId || m.id || m.title || m.name, si = s.inputs || {};
+  const val = {}; meta.forEach((m, k) => { const a = keyOf(m), b = m.title || m.name; val[k] = a in si ? si[a] : (b && b in si) ? si[b] : m.defval; });
+  const ov = document.createElement('div'); ov.className = 'ind-ov';
+  const dlg = document.createElement('div'); dlg.className = 'ind-dlg'; ov.appendChild(dlg); document.body.appendChild(ov);
+
+  // rows: group headers, then inline groups share one row
+  const rows = []; let lastGroup = null;
+  meta.forEach((m, k) => {
+    const g = m.group || '';
+    if (g !== lastGroup) { if (g) rows.push({ group: g }); lastGroup = g; }
+    const prev = rows[rows.length - 1];
+    if (m.inline && prev && prev.items && prev.inline === m.inline && prev.group === g) prev.items.push(k);
+    else rows.push({ items: [k], inline: m.inline || null, group: g });
+  });
+  const tip = m => m.tooltip ? `<span class="ind-tip" data-noi18n title="${esc(m.tooltip)}">ⓘ</span>` : '';
+  const ctl = k => {
+    const m = meta[k], v = val[k], label = esc(m.title || m.name);
+    if (m.type === 'bool') return `<label class="ind-bool"><input type="checkbox" data-k="${k}" ${v ? 'checked' : ''}><span data-noi18n>${label}</span>${tip(m)}</label>`;
+    let c;
+    if (m.options && m.options.length) c = `<select data-noi18n data-k="${k}">${m.options.map(o => `<option ${String(o) === String(v) ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+    else if (m.type === 'int' || m.type === 'float' || m.type === 'price') c = `<input class="ind-num" type="text" inputmode="decimal" data-k="${k}" value="${esc(v)}">`;
+    else if (m.type === 'color') { const h = colHex(v); c = `<button class="ind-sw" data-k="${k}" title="${esc(colStr(h.rgb, h.a))}"><i style="background:${h.rgb};opacity:${(h.a / 255).toFixed(2)}"></i></button>`; }
+    else if (m.type === 'text_area') c = `<textarea data-k="${k}" rows="3">${esc(v ?? '')}</textarea>`;
+    else c = `<input type="text" data-k="${k}" value="${esc(v ?? '')}">`;
+    return `<span class="ind-lbl"><span data-noi18n>${label}</span>${tip(m)}</span>${c}`;
   };
+  const body = !meta.length ? '<div class="ind-empty">У скрипта нет input.* параметров.</div>' : rows.map(r => r.group !== undefined && !r.items
+    ? `<div class="ind-grp" data-noi18n>${esc(r.group)}</div>`
+    : `<div class="ind-row${r.items.length > 1 ? ' inl' : ''}">${r.items.map(k => `<div class="ind-cell${meta[k].type === 'bool' ? ' b' : ''}">${ctl(k)}</div>`).join('')}</div>`).join('');
+  dlg.innerHTML = `<div class="ind-h"><b data-noi18n title="${esc(s.name)}">${esc(s.name)}</b><button class="ind-x" title="Закрыть (Esc)">✕</button></div>
+    <div class="ind-tabs"><span class="on">Входные данные</span></div>
+    <div class="ind-b">${body}</div>
+    <div class="ind-f">${meta.length ? '<button class="ind-btn" data-a="reset">По умолчанию</button>' : ''}<span class="sp"></span><button class="ind-btn" data-a="cancel">Отмена</button><button class="ind-btn pri" data-a="ok">ОК</button></div>`;
+
+  // live preview: re-run the script shortly after each change
+  let tmr = null, dirty = false, chain = Promise.resolve();
+  const rerun = () => (chain = chain.then(async () => { await runScript(s); renderAll(); }).catch(e => console.error(e)));
+  const collect = () => { const o = {}; meta.forEach((m, k) => { if (!sameVal(m, val[k], m.defval)) o[keyOf(m)] = val[k]; }); return o; };
+  const preview = () => { dirty = true; clearTimeout(tmr); tmr = setTimeout(() => { s.inputs = collect(); rerun(); }, 350); };
+  const setNum = (el, k, v) => {
+    const m = meta[k]; if (!Number.isFinite(v)) { el.classList.add('bad'); return; }
+    if (m.minval !== undefined) v = Math.max(m.minval, v); if (m.maxval !== undefined) v = Math.min(m.maxval, v);
+    if (m.type === 'int') v = Math.round(v);
+    el.classList.remove('bad'); val[k] = v; preview();
+  };
+  dlg.querySelectorAll('[data-k]').forEach(el => {
+    const k = +el.dataset.k, m = meta[k];
+    if (el.classList.contains('ind-sw')) { el.onclick = e => { e.stopPropagation(); colorPop(el, k); }; return; }
+    if (el.type === 'checkbox') { el.onchange = () => { val[k] = el.checked; preview(); }; return; }
+    if (el.classList.contains('ind-num')) {
+      el.oninput = () => { const v = parseFloat(el.value.replace(',', '.')); if (el.value.trim() === '' || el.value.trim() === '-') return; setNum(el, k, v); };
+      el.onblur = () => { el.value = String(val[k]); el.classList.remove('bad'); };
+      el.onkeydown = e => {
+        if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+        e.preventDefault();
+        const st = (m.step || (m.type === 'int' ? 1 : (Math.abs(+val[k]) < 1 ? 0.01 : 0.1))) * (e.shiftKey ? 10 : 1), dec = (String(st).split('.')[1] || '').length;
+        const v = +(Number(val[k]) + (e.key === 'ArrowUp' ? st : -st)).toFixed(Math.max(dec, (String(val[k]).split('.')[1] || '').length));
+        setNum(el, k, v); el.value = String(val[k]);
+      };
+      return;
+    }
+    el.oninput = el.onchange = () => { val[k] = el.value; preview(); };
+  });
+
+  // colour popover: palette, custom colour, opacity
+  let pop = null;
+  function colorPop(sw, k) {
+    if (pop) { const same = pop.k === k; pop.el.remove(); pop = null; if (same) return; }
+    const h = colHex(val[k]), el = document.createElement('div'); el.className = 'ind-cp';
+    el.innerHTML = `<div class="ind-pal">${SWATCHES.map(c => `<button data-c="${c}" style="background:${c}" class="${c === h.rgb ? 'on' : ''}"></button>`).join('')}</div>
+      <div class="ind-cprow"><input type="color" value="${h.rgb.toLowerCase()}"><input class="ind-hex" type="text" value="${h.rgb}" spellcheck="false"></div>
+      <div class="ind-cprow"><span class="muted">Непрозрачность</span><input type="range" min="0" max="100" value="${Math.round(h.a / 2.55)}"><b>${Math.round(h.a / 2.55)}%</b></div>`;
+    dlg.appendChild(el); pop = { el, k };
+    const r = sw.getBoundingClientRect(), dr = dlg.getBoundingClientRect();
+    el.style.top = Math.min(r.bottom - dr.top + 6, dr.height - el.offsetHeight - 8) + 'px';
+    el.style.left = Math.max(8, Math.min(r.right - dr.left - el.offsetWidth, dr.width - el.offsetWidth - 8)) + 'px';
+    const apply = (rgb, a) => {
+      val[k] = colStr(rgb, a); const i = sw.querySelector('i'); i.style.background = rgb; i.style.opacity = (a / 255).toFixed(2); sw.title = val[k];
+      el.querySelector('input[type=color]').value = rgb.toLowerCase(); el.querySelector('.ind-hex').value = rgb;
+      el.querySelectorAll('[data-c]').forEach(b => b.classList.toggle('on', b.dataset.c === rgb)); preview();
+    };
+    const cur = () => colHex(val[k]);
+    el.querySelectorAll('[data-c]').forEach(b => { b.onclick = () => apply(b.dataset.c, cur().a); });
+    el.querySelector('input[type=color]').oninput = e => apply(e.target.value.toUpperCase(), cur().a);
+    el.querySelector('.ind-hex').onchange = e => { const c = colHex(e.target.value); apply(c.rgb, cur().a); };
+    el.querySelector('input[type=range]').oninput = e => { el.querySelector('b').textContent = e.target.value + '%'; apply(cur().rgb, e.target.value * 2.55); };
+    el.onclick = e => e.stopPropagation();
+  }
+  dlg.addEventListener('click', () => { if (pop) { pop.el.remove(); pop = null; } });
+
+  // drag by the header
+  const hd = dlg.querySelector('.ind-h');
+  hd.onpointerdown = e => {
+    if (e.target.closest('button')) return;
+    const r = dlg.getBoundingClientRect(), ox = e.clientX - r.left, oy = e.clientY - r.top;
+    dlg.style.position = 'fixed'; dlg.style.margin = '0'; hd.setPointerCapture(e.pointerId);
+    hd.onpointermove = ev => { dlg.style.left = Math.max(0, Math.min(innerWidth - r.width, ev.clientX - ox)) + 'px'; dlg.style.top = Math.max(0, Math.min(innerHeight - 40, ev.clientY - oy)) + 'px'; };
+    hd.onpointerup = () => { hd.onpointermove = null; };
+  };
+
+  const close = async apply => {
+    clearTimeout(tmr); document.removeEventListener('keydown', onKey, true); ov.remove(); indDlg = null;
+    if (apply) { s.inputs = collect(); saveScripts(); if (dirty) await rerun(); }
+    else if (dirty) { s.inputs = before; await rerun(); }
+  };
+  const onKey = e => {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (pop) { pop.el.remove(); pop = null; } else close(false); }
+    else if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); close(true); }
+  };
+  document.addEventListener('keydown', onKey, true);
+  dlg.querySelector('.ind-x').onclick = () => close(false);
+  dlg.querySelector('[data-a="cancel"]').onclick = () => close(false);
+  dlg.querySelector('[data-a="ok"]').onclick = () => close(true);
+  const rs = dlg.querySelector('[data-a="reset"]');
+  if (rs) rs.onclick = () => {
+    if (pop) { pop.el.remove(); pop = null; }
+    meta.forEach((m, k) => { val[k] = m.defval; });
+    dlg.querySelectorAll('[data-k]').forEach(el => {
+      const k = +el.dataset.k, v = val[k];
+      if (el.classList.contains('ind-sw')) { const h = colHex(v), i = el.querySelector('i'); i.style.background = h.rgb; i.style.opacity = (h.a / 255).toFixed(2); el.title = colStr(h.rgb, h.a); }
+      else if (el.type === 'checkbox') el.checked = !!v;
+      else { el.value = v ?? ''; el.classList.remove('bad'); }
+    });
+    preview();
+  };
+  ov.addEventListener('mousedown', e => { if (e.target === ov) close(true); });
+  indDlg = { close };
 }
 
 // ───────── toolbar ─────────

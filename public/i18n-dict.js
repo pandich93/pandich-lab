@@ -812,5 +812,8 @@ window.QL_I18N_DICT = {
   // ── broker symbol search
   "У брокера": ["Broker", "Brokerda"],
   "Символа «{0}» у брокера {1} нет. Похожие: {2}. Выберите нужный в поиске символа.": ["Symbol \"{0}\" is not available at broker {1}. Similar: {2}. Pick the right one in symbol search.", "«{0}» belgisi {1} brokerida yo'q. O'xshashlari: {2}. Belgi qidiruvidan keraklisini tanlang."],
-  "Символа «{0}» у брокера {1} нет.": ["Symbol \"{0}\" is not available at broker {1}.", "«{0}» belgisi {1} brokerida yo'q."]
+  "Символа «{0}» у брокера {1} нет.": ["Symbol \"{0}\" is not available at broker {1}.", "«{0}» belgisi {1} brokerida yo'q."],
+  // ── indicator settings dialog
+  "Входные данные": ["Inputs", "Kiritmalar"],
+  "Непрозрачность": ["Opacity", "Shaffoflik"]
 };
