@@ -328,7 +328,7 @@ async function fetchBinance(symbol, interval, limit) {
     { base: 'https://api.binance.com/api/v3/klines', max: 1000 },
     { base: 'https://fapi.binance.com/fapi/v1/klines', max: 1500 },
   ];
-  let lastErr = null;
+  let lastErr = null, badSymbol = false;
   for (const h of hosts) {
     try {
       const all = [];
@@ -346,8 +346,9 @@ async function fetchBinance(symbol, interval, limit) {
       }
       if (!all.length) throw new Error('empty response');
       return all.map(k => ({ openTime: k[0], open: +k[1], high: +k[2], low: +k[3], close: +k[4], volume: +k[5], closeTime: k[6] }));
-    } catch (e) { lastErr = new Error(`${h.base}: ${e.message}`); }
+    } catch (e) { lastErr = new Error(`${h.base}: ${e.message}`); if (/Invalid symbol|-1121/.test(e.message)) badSymbol = true; }
   }
+  if (badSymbol) throw new Error(`Символ ${symbol} не найден на Binance`); // a plain answer instead of the last host's HTTP error
   throw lastErr;
 }
 

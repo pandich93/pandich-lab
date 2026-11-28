@@ -1158,4 +1158,6 @@ window.QL_I18N_DICT = {
   "Закончить": ["Finish", "Tugatish"],
   "? Тур по программе": ["? App tour", "? Dastur bo'ylab sayohat"],
   "Что умеет программа и где что находится": ["What the app can do and where everything is", "Dastur nimalar qila oladi va nima qayerda"],
+  "нет связи с источником, повторяю…": ["no connection to the data source, retrying…", "manba bilan aloqa yo'q, qayta urinilmoqda…"],
+  "Символ {0} не найден на Binance": ["Symbol {0} not found on Binance", "{0} simvoli Binance'da topilmadi"],
 };

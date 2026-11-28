@@ -321,6 +321,7 @@ body.embed #barsSel,body.embed #addScriptBtn,body.embed #editorBtn,body.embed .t
 body.embed .layout{height:100vh}
 body.embed .toolbar{height:32px;gap:4px;padding:0 6px}
 body.embed .mc-grid{min-width:0}
+#dataStatus{max-width:340px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 body.embed #dataStatus{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 body.embed .legend{max-width:85%}
 

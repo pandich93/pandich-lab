@@ -69,9 +69,24 @@ jobs:
           cp PandichLab-$VER-win-x64.exe PandichLab-Setup.exe
           cp PandichLab-$VER-mac-universal.dmg PandichLab-mac.dmg
           ls -la
-          NOTES="Windows: PandichLab-Setup.exe · macOS: PandichLab-mac.dmg. Not code-signed yet — Windows: More info → Run anyway; macOS: System Settings → Privacy & Security → Open Anyway."
+          # human-written notes for this version (section "## <version>" in desktop/RELEASE_NOTES.md) + the install footer
+          awk -v v="## $VER" '$0==v{f=1;next} /^## /{if(f)exit} f' ../desktop/RELEASE_NOTES.md > ../notes.md
+          cat >> ../notes.md <<'FOOT'
+
+          ---
+          **Скачать · Download:** Windows — `PandichLab-Setup.exe` · macOS — `PandichLab-mac.dmg`. Обновление приходит само · Updates install automatically.
+
+          Установщики пока не подписаны · Not code-signed yet:
+          - Windows: «Подробнее» → «Выполнить в любом случае» · More info → Run anyway
+          - macOS: «Системные настройки» → «Конфиденциальность и безопасность» → «Всё равно открыть» · System Settings → Privacy & Security → Open Anyway
+
+          Panda работает через твою подписку Claude (Pro/Max) или API-ключ; всё остальное бесплатно · Panda uses your own Claude subscription or API key; everything else is free.
+          FOOT
+          sed -i 's/^          //' ../notes.md
+          cat ../notes.md
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" * --clobber
+            gh release edit "$TAG" --notes-file ../notes.md
           else
-            gh release create "$TAG" * --title "Pandich Lab $VER" --notes "$NOTES" --latest
+            gh release create "$TAG" * --title "Pandich Lab $VER" --notes-file ../notes.md --latest
           fi

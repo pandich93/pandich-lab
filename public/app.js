@@ -102,7 +102,7 @@ async function loadBars() {
     startStream();
   } catch (e) {
     stopStream();
-    $('dataStatus').textContent = 'ошибка данных: ' + e.message;
+    $('dataStatus').textContent = 'ошибка данных: ' + shortErr(e.message); $('dataStatus').title = e.message;
     log('Данные: ' + e.message);
   }
 }
@@ -135,8 +135,11 @@ const QLHub = EMBED ? null : (() => {
 })();
 const hub = () => { try { return EMBED ? window.parent.QLHub : QLHub; } catch { return null; } };
 let streamOn = false, rerunTimer = null, lastTickAt = 0;
-function updateStatus(extra) {
+// network errors carry raw URLs and server replies — the toolbar shows a short phrase, the full text goes to the tooltip and the log
+function shortErr(e) { return /HTTP|fetch failed|ECONN|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|timeout|aborted/i.test(String(e)) ? 'нет связи с источником, повторяю…' : String(e).slice(0, 60); }
+function updateStatus(extra, full) {
   const last = S.bars[S.bars.length - 1];
+  $('dataStatus').title = full || '';
   const live = streamOn && Date.now() - lastTickAt < 10000;
   $('dataStatus').innerHTML = `<span class="live-dot ${live ? 'on' : ''}"></span>${esc(EMBED ? (S.srcLabel || '').split(' · ')[0] : (S.srcLabel || ''))}${EMBED ? '' : ` · ${S.bars.length} баров`} · ${last ? fmt(last.close, priceDigits()) : '—'}${extra ? ' · ' + esc(extra) : ''}`;
 }
@@ -156,7 +159,7 @@ function startStream() {
     lastTickAt = Date.now();
     updateStatus();
     if (appended || m.newBar) { clearTimeout(rerunTimer); rerunTimer = setTimeout(() => runAll(), 300); } // indicators recompute on bar close
-  }, err => updateStatus('поток: ' + err));
+  }, err => updateStatus('поток: ' + shortErr(err), String(err)));
 }
 window.addEventListener('pagehide', stopStream);
 function applyLiveBar(b) {
